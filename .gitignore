@@ -4,3 +4,4 @@
 /LLM-Grounding-Study
 /data/*
 !data/.gitkeep
+/source/__pycache__
