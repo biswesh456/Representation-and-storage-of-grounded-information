@@ -1,0 +1,1 @@
+oarsub -p "gpu='YES' and gpumem>30000" -l /nodes=1/gpunum=1 -t besteffort -I ./finetune_lora_script
