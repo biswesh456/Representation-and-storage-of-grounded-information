@@ -1,2 +1,2 @@
-def inference(dataset, **parameters):
+def inference(files, **parameters):
     pass

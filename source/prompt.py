@@ -91,8 +91,7 @@ def make_prompt(df):
     return prompt, answer
 
 
-def load_prompt(path):
-    files = glob(path+"/*.csv")
+def load_prompt(files):
     prompts = []
     answers = []
     for f in files : 

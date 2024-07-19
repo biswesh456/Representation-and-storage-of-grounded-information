@@ -1,12 +1,12 @@
 from .models import llama, gemma
 
-def inference(dataset, **parameters):
+def inference(files, **parameters):
     
     model_id = parameters['model_id']
 
     if 'llama' in model_id:
-        res = llama.inference(dataset=dataset, verbose=True, **parameters)
+        res = llama.inference(files=files, verbose=True, **parameters)
     if "gemma" in model_id:
-        res = gemma.inference(dataset=dataset, verbose=True, **parameters)
+        res = gemma.inference(files=files, verbose=True, **parameters)
 
     return res

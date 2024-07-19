@@ -13,7 +13,7 @@ from transformers.pipelines.pt_utils import KeyDataset
 
 
 from inference import FullDialog, SlidingWindow, Summary, RAG, InfiniTransformer, InfiniTransformerBonus, ChainOfThought, GraphRAG
-
+from utils import save, get_files
 
 import prompt as prompting
 import os
@@ -24,11 +24,13 @@ def main():
     hf_token = os.environ['HF_TOKEN']
 
     #TODO Jobs should be ran with different models through code args
-    model_id = "meta-llama/Meta-Llama-3-8B-Instruct"
-    #model_id = "google/gemma-2-27b-it"
-    #model_id = "google/gemma-2-9b-it"
-    
 
+    #model_id = "meta-llama/Meta-Llama-3-8B-Instruct"
+    #model_id = "meta-llama/Meta-Llama-3-70B-Instruct"
+    #model_id = "google/gemma-2-27b-it"
+    model_id = "google/gemma-2-9b-it"
+    
+    #TODO remember to run only on A100 40 or 80
     runs = [FullDialog,
             SlidingWindow,
             Summary, 
@@ -38,10 +40,11 @@ def main():
             ChainOfThought, 
             GraphRAG]
 
-    prompts, answers = prompting.load_prompt("../../data/temporal") #TODO connect to real data
+    #prompts, answers = prompting.load_prompt("../../data/temporal") #TODO connect to real data
     
-    dataset = [[{"role":"user","content":prompt}] for prompt in prompts]
+    #dataset = [[{"role":"user","content":prompt}] for prompt in prompts]
     devices = []
+
     if torch.cuda.is_available() :
             nb_devices = torch.cuda.device_count()
             print("NB devices : ",nb_devices)
@@ -54,8 +57,10 @@ def main():
                   "devices":devices}
 
     for run in runs: 
-        #TODO add if case to check if already processed
-        res = run.inference(dataset = dataset, **parameters)
-        print(res)
+        files = get_files(run, model_id) #TODO change to dataset instead of files
+        if files == []:
+            continue
+        run.inference(files = files, **parameters) #TODO add dynamic saves with no impact on inference
+        
 if __name__ == '__main__':
     main()

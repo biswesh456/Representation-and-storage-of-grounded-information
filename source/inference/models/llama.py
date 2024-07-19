@@ -3,18 +3,31 @@ from transformers.pipelines.pt_utils import KeyDataset
 from transformers import pipeline
 import torch
 import time
+import prompt as prompting
+from utils import get_files,save
+from inference import FullDialog
 
-def inference(dataset,
+def inference(files,
               devices,
               model_id,
               hf_token,
               verbose=False,
               **kwargs):
+    
 
+    prompts, answers = prompting.load_prompt(files) #TODO connect to real data
+    
+    dataset = [[{"role":"user","content":prompt}] for prompt in prompts]
+
+
+
+    print(devices)
     if any(["8000" in d for d in devices]):
         attn_implementation = 'sdpa'
+        print("using sdpa")
     else : 
         attn_implementation = 'flash_attention_2'
+        print("using flash_attention_2")
 
     max_new_tokens=8192
     
@@ -43,11 +56,14 @@ def inference(dataset,
         print("Model on device : ", pipe.model.device ,torch.cuda.get_device_name(pipe.model.device))#maybe dont work if on multiple devices
 
     start = time.process_time()
-    res = [out[0]['generated_text'] for out in tqdm(pipe(dataset,
-                                    eos_token_id=terminators,
-                                    do_sample=True,
-                                    temperature=0.6,
-                                    top_p=0.9,))]
+    for out,file in zip(tqdm(pipe(dataset,eos_token_id=terminators,do_sample=True,temperature=0.6,top_p=0.9,)), files):
+        save(out[0]['generated_text'], FullDialog,file, model_id)
+    
+    #res = [out[0]['generated_text'] for out in tqdm(pipe(dataset,
+    #                                eos_token_id=terminators,
+    #                                do_sample=True,
+    #                                temperature=0.6,
+    #                                top_p=0.9,))]
     end = time.process_time()
     print("time : ", end-start)
-    return res
+    return []

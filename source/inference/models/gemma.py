@@ -3,17 +3,26 @@ from transformers.pipelines.pt_utils import KeyDataset
 from transformers import pipeline
 import torch
 import time 
-def inference(dataset,
+import prompt as prompting
+from utils import save
+from inference import FullDialog
+
+def inference(files,
               devices,
               model_id,
               hf_token,
               verbose=False,
               **kwargs):
+    
+    prompts, answers = prompting.load_prompt(files) #TODO connect to real data
+    
+    dataset = [[{"role":"user","content":prompt}] for prompt in prompts]
 
     if any(["8000" in d for d in devices]):
         attn_implementation = 'sdpa'
     else : 
         attn_implementation = 'flash_attention_2'
+        attn_implementation = 'sdpa'
         #attn_implementation = 'eager'
 
     max_new_tokens=3000 
@@ -40,8 +49,9 @@ def inference(dataset,
     start = time.process_time()
 
     res = [] 
-
-    res = [out for out in tqdm(pipe(dataset))]
+    #res = [out for out in tqdm(pipe(dataset))]
+    for out, file in zip(tqdm(pipe(dataset)), files): 
+        save(out[0]['generated_text'], FullDialog,file, model_id)
                                    
     end = time.process_time()
     print("time : ", end-start)

@@ -1,0 +1,6 @@
+#!/bin/bash
+
+nvidia-smi
+
+python main.py
+
