@@ -25,10 +25,10 @@ def main():
 
     #TODO Jobs should be ran with different models through code args
 
-    #model_id = "meta-llama/Meta-Llama-3-8B-Instruct"
+    model_id = "meta-llama/Meta-Llama-3-8B-Instruct"
     #model_id = "meta-llama/Meta-Llama-3-70B-Instruct"
     #model_id = "google/gemma-2-27b-it"
-    model_id = "google/gemma-2-9b-it"
+    #model_id = "google/gemma-2-9b-it"
     
     #TODO remember to run only on A100 40 or 80
     runs = [FullDialog,
@@ -59,6 +59,7 @@ def main():
     for run in runs: 
         files = get_files(run, model_id) #TODO change to dataset instead of files
         if files == []:
+            print("Already executed :", run.__name__.split(".")[-1] )
             continue
         run.inference(files = files, **parameters) #TODO add dynamic saves with no impact on inference
         

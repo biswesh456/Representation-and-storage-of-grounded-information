@@ -83,20 +83,36 @@ def get_end_prompt(user="A"):
     return prompt
 
 
-def make_prompt(df):
+def make_prompt(df, tokenizer, processing):
     prompt = get_start_prompt()
     dialog, answer = get_dialog(df)
-    prompt += dialog
-    prompt += get_end_prompt()
+    end_prompt = get_end_prompt()
+    tokenized = tokenizer([prompt, dialog, end_prompt], return_offsets_mapping=True)
+    offsets = tokenized["offset_mapping"]
+    input_ids = tokenized["input_ids"]
+    if processing is None:
+        prompt += dialog
+    else: 
+        if processing == "windowed":
+            prompt_len = len(input_ids[0]) + len(input_ids[1]) + len(input_ids[2])
+            token = tokenizer("\n")["input_ids"][-1]
+            if prompt_len > 3996:
+                offset_size = prompt_len - 3996
+                indexes = [i for i,t in enumerate(input_ids[1]) if (t == token) and (i < offset_size)]
+                
+                dialog = dialog[offsets[1][indexes[-1]][-1]:]
+                prompt += dialog
+
+    prompt += end_prompt
     return prompt, answer
 
 
-def load_prompt(files):
+def load_prompt(files, tokenizer, processing=None):
     prompts = []
     answers = []
     for f in files : 
         df = pd.read_csv(f)
-        prompt, answer = make_prompt(df)
+        prompt, answer = make_prompt(df, tokenizer, processing)
         prompts += [prompt]
         answers += [answer]
     return prompts, answers

@@ -11,12 +11,11 @@ def inference(files,
               devices,
               model_id,
               hf_token,
+              max_length,
               verbose=False,
               **kwargs):
     
-    prompts, answers = prompting.load_prompt(files) #TODO connect to real data
     
-    dataset = [[{"role":"user","content":prompt}] for prompt in prompts]
 
     if any(["8000" in d for d in devices]):
         attn_implementation = 'sdpa'
@@ -36,11 +35,15 @@ def inference(files,
                                   'torch_dtype':torch.bfloat16,},
                     device_map="auto",
                     token=hf_token,
-                    max_new_tokens=max_new_tokens,
+                    max_length=max_length,
+                    #max_new_tokens=max_new_tokens,
                     return_full_text =False,
                     #add_special_tokens=True,
                     )
-
+    
+    prompts, answers = prompting.load_prompt(files, tokenizer=pipe.tokenizer, processing="windowed") #TODO connect to real data
+    
+    dataset = [[{"role":"user","content":prompt}] for prompt in prompts]
 
     if verbose: 
         print(pipe.model.device)

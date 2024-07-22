@@ -26,7 +26,6 @@ def get_files(run, model_id):
     dataset = glob("../../data/temporal/*.csv") #TODO change to real dataset
     files = None
     directory = "../data/" + run.__name__.split(".")[-1] +"/" + MODELS[model_id]
-    print(directory)
     if os.path.exists(directory):
         existing_files = glob(directory+"/*.txt")
         temp_existing = set([f.split("/")[-1].split(".")[0] for f in existing_files])
@@ -35,6 +34,6 @@ def get_files(run, model_id):
         #print(files)
         files = ["../../data/temporal/"+f+".csv" for f in files]#TODO change to real dataset
     else: 
-        print("doesnt exists")
+        print("Not implemented :", run.__name__.split(".")[-1]  )
         files = dataset
     return files
