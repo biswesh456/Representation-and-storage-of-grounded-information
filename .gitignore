@@ -3,6 +3,8 @@
 /papers
 /LLM-Grounding-Study
 /data/*
+/runs/*
+!runs/.gitkeep
 !data/.gitkeep
 /source/__pycache__
 **/__pycache__/

@@ -12,7 +12,10 @@ def inference(files,
               model_id,
               hf_token,
               max_length,
+              model,
+              tokenizer,
               verbose=False,
+              processing=None,
               **kwargs):
     
     
@@ -29,19 +32,18 @@ def inference(files,
 
     print("Launching : ", model_id)
 
-    pipe = pipeline("text-generation",  
-                    model=model_id,
-                    model_kwargs={'attn_implementation':attn_implementation,
-                                  'torch_dtype':torch.bfloat16,},
-                    device_map="auto",
+    pipe = pipeline("text-generation",
+                    model=model,
+                    tokenizer=tokenizer,
                     token=hf_token,
                     max_length=max_length,
+                    device_map="auto",
                     #max_new_tokens=max_new_tokens,
                     return_full_text =False,
                     #add_special_tokens=True,
                     )
     
-    prompts, answers = prompting.load_prompt(files, tokenizer=pipe.tokenizer, processing="windowed") #TODO connect to real data
+    prompts, answers = prompting.load_prompt(files, tokenizer=pipe.tokenizer, processing=processing) #TODO connect to real data
     
     dataset = [[{"role":"user","content":prompt}] for prompt in prompts]
 

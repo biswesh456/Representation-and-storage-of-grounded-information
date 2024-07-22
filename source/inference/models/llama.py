@@ -12,33 +12,30 @@ def inference(files,
               model_id,
               hf_token,
               max_length,
+              run,
+              model,
+              tokenizer,
               verbose=False,
+              processing=None,
               **kwargs):
 
-    print(devices)
-    if any(["8000" in d for d in devices]):
-        attn_implementation = 'sdpa'
-        print("using sdpa")
-    else : 
-        attn_implementation = 'flash_attention_2'
-        print("using flash_attention_2")
+    
 
     max_new_tokens=8192
     
 
     print("Launching : ", model_id)
 
-    pipe = pipeline("text-generation",  
-                    model=model_id,
-                    model_kwargs={'attn_implementation':attn_implementation,
-                                  'torch_dtype':torch.bfloat16,},
-                    device_map="auto",
+
+    pipe = pipeline("text-generation",
+                    model=model,
+                    tokenizer=tokenizer,
                     token=hf_token,
                     max_length=max_length,
+                    device_map="auto",
                     #max_new_tokens=max_new_tokens,
                     return_full_text =False,
                     add_special_tokens=True)
-
     terminators = [
             pipe.tokenizer.eos_token_id,
             pipe.tokenizer.convert_tokens_to_ids("<|eot_id|>")
@@ -47,7 +44,7 @@ def inference(files,
     pipe.model.generation_config.pad_token_id = pipe.tokenizer.eos_token_id
 
 
-    prompts, answers = prompting.load_prompt(files, tokenizer=pipe.tokenizer, processing="windowed") #TODO connect to real data
+    prompts, answers = prompting.load_prompt(files, tokenizer=pipe.tokenizer, processing=processing) #TODO connect to real data
     
     dataset = [[{"role":"user","content":prompt}] for prompt in prompts]
 
@@ -58,7 +55,7 @@ def inference(files,
 
     start = time.process_time()
     for out,file in zip(tqdm(pipe(dataset,eos_token_id=terminators,do_sample=True,temperature=0.6,top_p=0.9,)), files):
-        save(out[0]['generated_text'], FullDialog,file, model_id)
+        save(out[0]['generated_text'], run,file, model_id)
     
     #res = [out[0]['generated_text'] for out in tqdm(pipe(dataset,
     #                                eos_token_id=terminators,

@@ -66,7 +66,10 @@ def get_dialog(df, user="A"):
     return prompt, answer
 
 
-def get_start_prompt():
+def get_start_prompt(processing):
+    if processing == "summary":
+        #TODO MUST MODIFY prompt
+        prompt = "Instructions : Here is a conversation between two Participants A and B who are in a virtual space that has lots of different rooms that are depicted with images. Each room has a type (such as kitchen, bathroom, bedroom, etc.).  The participants are initially located in different rooms. The goal of the game is for the two participants to locate themselves in the same room. In order to achieve this goal, the participants communicate with one another by text and describe the room they find themselves in. On the basis of those descriptions, they move to different rooms and describe their new room to the other participant. The game ends when the two participants find themselves in the same room. We translated the images that the participants saw into text. That description of the room is provided below as soon as a participant enters a given room. The current room description of User A starts with a token <Image A> and the current room description of User B starts with a token <Image B>. Every utterance from A or B is preceded with a timestamp closed under brackets.\nFollowing is the dialog history along with image descriptions :\n"
     prompt = "Instructions : Here is a conversation between two Participants A and B who are in a virtual space that has lots of different rooms that are depicted with images. Each room has a type (such as kitchen, bathroom, bedroom, etc.).  The participants are initially located in different rooms. The goal of the game is for the two participants to locate themselves in the same room. In order to achieve this goal, the participants communicate with one another by text and describe the room they find themselves in. On the basis of those descriptions, they move to different rooms and describe their new room to the other participant. The game ends when the two participants find themselves in the same room. We translated the images that the participants saw into text. That description of the room is provided below as soon as a participant enters a given room. The current room description of User A starts with a token <Image A> and the current room description of User B starts with a token <Image B>. Every utterance from A or B is preceded with a timestamp closed under brackets.\nFollowing is the dialog history along with image descriptions :\n"
     return prompt
 
@@ -84,25 +87,28 @@ def get_end_prompt(user="A"):
 
 
 def make_prompt(df, tokenizer, processing):
-    prompt = get_start_prompt()
+    prompt = get_start_prompt(processing)
     dialog, answer = get_dialog(df)
     end_prompt = get_end_prompt()
+
     tokenized = tokenizer([prompt, dialog, end_prompt], return_offsets_mapping=True)
     offsets = tokenized["offset_mapping"]
     input_ids = tokenized["input_ids"]
-    if processing is None:
-        prompt += dialog
-    else: 
-        if processing == "windowed":
-            prompt_len = len(input_ids[0]) + len(input_ids[1]) + len(input_ids[2])
-            token = tokenizer("\n")["input_ids"][-1]
-            if prompt_len > 3996:
-                offset_size = prompt_len - 3996
-                indexes = [i for i,t in enumerate(input_ids[1]) if (t == token) and (i < offset_size)]
-                
-                dialog = dialog[offsets[1][indexes[-1]][-1]:]
-                prompt += dialog
 
+    if processing == "windowed":
+        prompt_len = len(input_ids[0]) + len(input_ids[1]) + len(input_ids[2])
+        token = tokenizer("\n")["input_ids"][-1]
+        if prompt_len > 3996:
+            offset_size = prompt_len - 3996
+            indexes = [i for i,t in enumerate(input_ids[1]) if (t == token) and (i < offset_size)]
+            
+            dialog = dialog[offsets[1][indexes[-1]][-1]:]
+    if processing == "summary":
+        #TODO make summary
+        #TODO retrieve summary
+        print("Summary not implemented")
+
+    prompt += dialog
     prompt += end_prompt
     return prompt, answer
 
