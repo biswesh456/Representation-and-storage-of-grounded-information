@@ -33,18 +33,27 @@ def inference(files,
                     token=hf_token,
                     max_length=max_length,
                     device_map="auto",
-                    #max_new_tokens=max_new_tokens,
                     return_full_text =False,
                     add_special_tokens=True)
     terminators = [
             pipe.tokenizer.eos_token_id,
             pipe.tokenizer.convert_tokens_to_ids("<|eot_id|>")
-            ]
+            ]   
+    parameters ={"eos_token_id":terminators,
+                 "do_sample":True,
+                 "temperature":0.6,
+                 "top_p":0.9,
+                 "model_id":model_id,
+                 "run":run}
+    
+    
 
     pipe.model.generation_config.pad_token_id = pipe.tokenizer.eos_token_id
 
+    if run.__name__.split(".")[-1] == "Summary":
+        prompting.make_summaries(pipe, files, **parameters)
 
-    prompts, answers = prompting.load_prompt(files, tokenizer=pipe.tokenizer, processing=processing) #TODO connect to real data
+    prompts, answers = prompting.load_prompt(files, tokenizer=pipe.tokenizer, model_id=model_id, processing=processing) #TODO connect to real data
     
     dataset = [[{"role":"user","content":prompt}] for prompt in prompts]
 
@@ -55,13 +64,8 @@ def inference(files,
 
     start = time.process_time()
     for out,file in zip(tqdm(pipe(dataset,eos_token_id=terminators,do_sample=True,temperature=0.6,top_p=0.9,)), files):
-        save(out[0]['generated_text'], run,file, model_id)
+        save(out[0]['generated_text'], run, file, model_id)
     
-    #res = [out[0]['generated_text'] for out in tqdm(pipe(dataset,
-    #                                eos_token_id=terminators,
-    #                                do_sample=True,
-    #                                temperature=0.6,
-    #                                top_p=0.9,))]
     end = time.process_time()
     print("time : ", end-start)
     return []

@@ -11,9 +11,11 @@ MODELS = {"meta-llama/Meta-Llama-3-8B-Instruct":"Llama3-8B-it",
               "google/gemma-2-9b-it":"Gemma-2-9B-it",
               }
 
-def save(data, run, file, model_id):
+def save(data, run, file, model_id, optional_arg=None):
 
     directory = "../runs/" + run.__name__.split(".")[-1] +"/"
+    if optional_arg is not None:
+        directory = "../data/"+optional_arg+"/"
     if not os.path.exists(directory):
         os.mkdir(directory)
     directory += MODELS[model_id] + "/"
@@ -23,11 +25,13 @@ def save(data, run, file, model_id):
         file.write(data)
         file.close()
 
-def get_files(run, model_id):
+def get_files(run, model_id, optional_arg=None):
     #must return the files that have not been executed
     dataset = glob("../../data/temporal/*.csv") #TODO change to real dataset
     files = None
     directory = "../runs/" + run.__name__.split(".")[-1] +"/" 
+    if optional_arg is not None:
+        directory =  "../data/"+optional_arg+"/"
     if os.path.exists(directory):
         directory += MODELS[model_id]
         existing_files = glob(directory+"/*.txt")

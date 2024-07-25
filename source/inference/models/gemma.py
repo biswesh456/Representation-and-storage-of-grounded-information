@@ -12,6 +12,7 @@ def inference(files,
               model_id,
               hf_token,
               max_length,
+              run,
               model,
               tokenizer,
               verbose=False,
@@ -26,8 +27,6 @@ def inference(files,
         attn_implementation = 'flash_attention_2'
         attn_implementation = 'sdpa'
         #attn_implementation = 'eager'
-
-    max_new_tokens=3000 
     
 
     print("Launching : ", model_id)
@@ -38,12 +37,16 @@ def inference(files,
                     token=hf_token,
                     max_length=max_length,
                     device_map="auto",
-                    #max_new_tokens=max_new_tokens,
                     return_full_text =False,
                     #add_special_tokens=True,
                     )
-    
-    prompts, answers = prompting.load_prompt(files, tokenizer=pipe.tokenizer, processing=processing) #TODO connect to real data
+    parameters ={"model_id":model_id,
+                 "run":run}
+
+    if run.__name__.split(".")[-1] == "Summary":
+        prompting.make_summaries(pipe, files, **parameters)
+
+    prompts, answers = prompting.load_prompt(files, tokenizer=pipe.tokenizer, model_id=model_id, processing=processing) #TODO connect to real data
     
     dataset = [[{"role":"user","content":prompt}] for prompt in prompts]
 
