@@ -41,10 +41,10 @@ def inference(files,
                     #add_special_tokens=True,
                     )
     parameters ={"model_id":model_id,
-                 "run":run}
+                 "run":run,
+                 "kwargs": kwargs}
 
-    if run.__name__.split(".")[-1] == "Summary":
-        prompting.make_summaries(pipe, files, **parameters)
+    prompting.pre_generate(pipe, files, **parameters)
 
     prompts, answers = prompting.load_prompt(files, tokenizer=pipe.tokenizer, model_id=model_id, processing=processing) #TODO connect to real data
     
@@ -59,7 +59,7 @@ def inference(files,
     res = [] 
     #res = [out for out in tqdm(pipe(dataset))]
     for out, file in zip(tqdm(pipe(dataset)), files): 
-        save(out[0]['generated_text'], FullDialog,file, model_id)
+        save(out[0]['generated_text'], run, file, model_id)
                                    
     end = time.process_time()
     print("time : ", end-start)

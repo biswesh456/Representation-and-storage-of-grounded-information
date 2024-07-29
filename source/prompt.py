@@ -1,13 +1,21 @@
 import pandas as pd
 from glob import glob
 import datetime
-from transformers import pipeline
+from transformers import pipeline, AutoTokenizer, AutoModel
 from utils import get_files, save
 import utils
 from inference import Summary
 from tqdm import tqdm
+from langchain_chroma import Chroma
+from langchain_core.documents import Document
+import torch
 
-def get_dialog(df, user="A"):
+import chromadb
+
+
+
+
+def get_dialog(df, user="A", img=True):
     image_df = pd.read_csv("../../LLM-Grounding-Study/data/image_descriptions_all_final.csv")
 
     image_descriptions_dict = {}
@@ -44,6 +52,10 @@ def get_dialog(df, user="A"):
             #when there is a change of dialog
             if time < lasttime :
                 time_offset += lasttime - time
+                time += time_offset
+                time = str(time).split(" ")[-1]
+                if index != df.index[-1]:
+                    prompt += "["+ time + "] "
             else : 
                 time += time_offset
                 time = str(time).split(" ")[-1]
@@ -58,11 +70,11 @@ def get_dialog(df, user="A"):
             answer += row["msg"]
         
         prompt += "\n"
-
-        if lastimage != temp_image and type(temp_image) == str:
-                prompt += "<Image "+ user +"> " + image_descriptions_dict[temp_image.split("/")[-1]] + " <Image "+ user +"> "
-                lastimage = temp_image
-                prompt += "\n"
+        if img :
+            if lastimage != temp_image and type(temp_image) == str:
+                    prompt += "<Image "+ user +"> " + image_descriptions_dict[temp_image.split("/")[-1]] + " <Image "+ user +"> "
+                    lastimage = temp_image
+                    prompt += "\n"
         lasttime = pd.to_datetime(df.loc[index,"time"].split(" ")[-1], format='%H:%M:%S')
         lastindex = index
         
@@ -111,6 +123,12 @@ def make_prompt(df, tokenizer, model_id, file, processing):
                 summary = f.read()
                 f.close()
             prompt = get_start_prompt(processing=processing) + summary
+        if processing == "rag":
+            with open("../data/RAG/"+ utils.MODELS[model_id] + "/" + file.split("/")[-1].split(".")[0] + ".txt") as f:
+                rag = f.read()
+                f.close()
+            prompt = get_start_prompt(processing=processing) + rag
+
     prompt += end_prompt
     return prompt, answer
 
@@ -133,7 +151,7 @@ def make_summaries(pipe, files, **parameters):
         model_id = parameters.pop("model_id")
     start = get_start_prompt(processing="noprocessing")
     end = "\nSummarize the conversation without missing any information in less than 200 words."
-    files = get_files(Summary, model_id, optional_arg=run.__name__.split('.')[-1])
+    files = get_files(run, model_id, optional_arg=run.__name__.split('.')[-1])
     print("Generating summaries for ", len(files) ," files")
     for f in tqdm(files) : 
         df = pd.read_csv(f)
@@ -146,3 +164,91 @@ def make_summaries(pipe, files, **parameters):
         summary = pipe([{"role":"user","content":start+dialog+end}], max_new_tokens=300, **parameters)
         print("generated :", summary[0]['generated_text']) #TODO verify all prompts are good
         save(summary[0]['generated_text'] +"\n"+ last_n, run, f, model_id, run.__name__.split(".")[-1])
+
+
+def make_rag(pipe, files, **parameters):
+    n = 5
+    if "run" in parameters:
+        run = parameters.pop("run")
+    if "model_id" in parameters:
+        model_id = parameters.pop("model_id")
+    if "overlap" in parameters['kwargs']:
+        overlap = parameters['kwargs'].pop("overlap")
+    if "chunk_size" in parameters['kwargs']:
+        chunk_size = parameters['kwargs'].pop("chunk_size")
+
+
+    start = get_start_prompt(processing="rag")
+    end = get_end_prompt() #TODO modify prompts
+    files = get_files(run, model_id, optional_arg=run.__name__.split('.')[-1])
+    print("Processing RAG, files : ", len(files))
+    for f in tqdm(files) : 
+        df = pd.read_csv(f)
+        dialog, answer = get_dialog(df, img=False)
+        #print(dialog)
+        split_dialog = dialog.split("\n")
+        if "\n" in split_dialog : 
+            split_dialog.remove("\n")
+        if "" in split_dialog : 
+            split_dialog.remove("")
+        query = split_dialog[-2]
+        split_dialog = split_dialog[:-1]
+        chunks_overlapped = [split_dialog[i: i + chunk_size]for i in range(0,len(split_dialog) - chunk_size + 1, overlap)]
+        documents = []
+        chunks = []
+        for chunk in chunks_overlapped:
+            temp_chunk = ""
+            for otturence in chunk:
+                temp_chunk += otturence + "\n"
+            temp_chunk = temp_chunk[:-2]
+
+            chunks += [temp_chunk]
+            documents += [Document(page_content=temp_chunk)]
+
+        chroma_client = chromadb.PersistentClient(path="../data/RAGdatabase/db")
+        colname = f.split("/")[-1].split(".")[0]
+        if colname in [c.name for c in chroma_client.list_collections()]:
+            continue
+
+        collection = chroma_client.create_collection(name=f.split("/")[-1].split(".")[0])
+        collection.add(
+            documents=chunks,
+            embeddings=generate_embeddings(chunks, "document", **parameters),
+            ids=["id" + str(i) for i in range(len(chunks))]
+        )
+        
+        db = Chroma(client=chroma_client, collection_name=colname) 
+
+        docs = db.similarity_search_by_vector_with_relevance_scores(generate_embeddings(query, "query", **parameters), k=3)
+        docs = [d[0].page_content for d in docs]
+        prompt = ""
+        for d in docs : 
+            prompt += d + "\n"
+
+        prompt += query
+        save(prompt, run, f, model_id, run.__name__.split(".")[-1])
+
+def pre_generate(pipe, files, **parameters):
+
+    run = parameters["run"]
+    str_run = run.__name__.split(".")[-1]
+
+    if str_run == "Summary":
+        make_summaries(pipe, files, **parameters)
+    if str_run == "RAG":
+        make_rag(pipe, files, **parameters)
+
+def generate_embeddings(documents, pre=None, **parameters):
+    prefixes = {"query":"Given the question from the user, retrieve relevant otturances that answer the question: ",
+               "document" :"otturances: "}
+    prefix = prefixes[pre]
+    documents = [f"{prefix} {document}" for document in documents]
+    #tokenizer = AutoTokenizer.from_pretrained('nvidia/NV-Retriever-v1')
+    #model = AutoModel.from_pretrained('nvidia/NV-Retriever-v1', trust_remote_code=True, torch_dtype=torch.float16)
+    tokenizer = parameters["kwargs"]["rag_tokenizer"]
+    model = parameters["kwargs"]["rag_model"]
+    tok_documents = tokenizer(documents, padding=True, truncation=True, return_tensors='pt').to("cuda")
+    model.to("cuda")
+    with torch.no_grad():
+        embeddings_queries = model(**tok_documents)
+    return embeddings_queries.tolist()

@@ -44,14 +44,15 @@ def inference(files,
                  "temperature":0.6,
                  "top_p":0.9,
                  "model_id":model_id,
-                 "run":run}
+                 "run":run,
+                 "kwargs" : kwargs}
     
     
 
     pipe.model.generation_config.pad_token_id = pipe.tokenizer.eos_token_id
 
-    if run.__name__.split(".")[-1] == "Summary":
-        prompting.make_summaries(pipe, files, **parameters)
+    #generate the prompts 
+    prompting.pre_generate(pipe, files, **parameters)
 
     prompts, answers = prompting.load_prompt(files, tokenizer=pipe.tokenizer, model_id=model_id, processing=processing) #TODO connect to real data
     
