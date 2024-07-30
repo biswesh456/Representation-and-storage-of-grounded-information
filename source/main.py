@@ -26,6 +26,7 @@ def main():
     #TODO Jobs should be ran with different models through code args
 
     model_id = "meta-llama/Meta-Llama-3-8B-Instruct"
+    model_id = "meta-llama/Meta-Llama-3.1-8B-Instruct"
     #model_id = "meta-llama/Meta-Llama-3-70B-Instruct"
     #model_id = "google/gemma-2-27b-it"
     #model_id = "google/gemma-2-9b-it"

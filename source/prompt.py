@@ -112,10 +112,10 @@ def make_prompt(df, tokenizer, model_id, file, processing):
     else: 
         if processing == "windowed":
             prompt_len = len(input_ids[0]) + len(input_ids[1]) + len(input_ids[2])
-            split = tokenizer("\n")
+            split_tok = tokenizer("\n")['input_ids'][1]
             if prompt_len > 3996:
                 offset_size = prompt_len - 3996
-                indexes = [i for i,t in enumerate(input_ids[1]) if (t == 108) and (i < offset_size)]
+                indexes = [i for i,t in enumerate(input_ids[1]) if (t == split_tok) and (i < offset_size)]
                 dialog = dialog[offsets[1][indexes[-1]][-1]:]
             #generate summaries if not existing
         if processing == "summary":
@@ -124,7 +124,7 @@ def make_prompt(df, tokenizer, model_id, file, processing):
                 f.close()
             prompt = get_start_prompt(processing=processing) + summary
         if processing == "rag":
-            with open("../data/RAG/"+ utils.MODELS[model_id] + "/" + file.split("/")[-1].split(".")[0] + ".txt") as f:
+            with open("../data/RAG/"+ file.split("/")[-1].split(".")[0] + ".txt") as f:
                 rag = f.read()
                 f.close()
             prompt = get_start_prompt(processing=processing) + rag
@@ -152,7 +152,6 @@ def make_summaries(pipe, files, **parameters):
     start = get_start_prompt(processing="noprocessing")
     end = "\nSummarize the conversation without missing any information in less than 200 words."
     files = get_files(run, model_id, optional_arg=run.__name__.split('.')[-1])
-    print("Generating summaries for ", len(files) ," files")
     for f in tqdm(files) : 
         df = pd.read_csv(f)
         dialog, answer = get_dialog(df)
@@ -162,7 +161,6 @@ def make_summaries(pipe, files, **parameters):
             last_n += d + "\n"
         last_n = last_n[:-3]
         summary = pipe([{"role":"user","content":start+dialog+end}], max_new_tokens=300, **parameters)
-        print("generated :", summary[0]['generated_text']) #TODO verify all prompts are good
         save(summary[0]['generated_text'] +"\n"+ last_n, run, f, model_id, run.__name__.split(".")[-1])
 
 
@@ -180,12 +178,11 @@ def make_rag(pipe, files, **parameters):
 
     start = get_start_prompt(processing="rag")
     end = get_end_prompt() #TODO modify prompts
-    files = get_files(run, model_id, optional_arg=run.__name__.split('.')[-1])
+    files = get_files(run, "", optional_arg=run.__name__.split('.')[-1])
     print("Processing RAG, files : ", len(files))
     for f in tqdm(files) : 
         df = pd.read_csv(f)
         dialog, answer = get_dialog(df, img=False)
-        #print(dialog)
         split_dialog = dialog.split("\n")
         if "\n" in split_dialog : 
             split_dialog.remove("\n")
@@ -226,7 +223,7 @@ def make_rag(pipe, files, **parameters):
             prompt += d + "\n"
 
         prompt += query
-        save(prompt, run, f, model_id, run.__name__.split(".")[-1])
+        save(prompt, run, f, "", run.__name__.split(".")[-1])
 
 def pre_generate(pipe, files, **parameters):
 
