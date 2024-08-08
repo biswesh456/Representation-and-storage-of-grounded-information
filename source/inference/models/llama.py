@@ -64,7 +64,7 @@ def inference(files,
         print("Model on device : ", pipe.model.device ,torch.cuda.get_device_name(pipe.model.device))#maybe dont work if on multiple devices
 
     start = time.process_time()
-    for out,file in zip(tqdm(pipe(dataset,eos_token_id=terminators,do_sample=True,temperature=0.6,top_p=0.9,)), files):
+    for out,file in zip(tqdm(pipe(dataset,eos_token_id=terminators,do_sample=True,temperature=0.6,top_p=0.9)), files):
         save(out[0]['generated_text'], run, file, model_id)
     
     end = time.process_time()

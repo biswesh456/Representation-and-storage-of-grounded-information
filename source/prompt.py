@@ -82,21 +82,24 @@ def get_dialog(df, user="A", img=True):
 
 
 def get_start_prompt(processing):
-    if processing == "summary":
-            prompt = "Instructions : Here is a summary of a conversation between two Participants A and B who are in a virtual space that has lots of different rooms that are depicted with images. Each room has a type (such as kitchen, bathroom, bedroom, etc.).  The participants are initially located in different rooms. The goal of the game is for the two participants to locate themselves in the same room. In order to achieve this goal, the participants communicate with one another by text and describe the room they find themselves in. On the basis of those descriptions, they move to different rooms and describe their new room to the other participant. The game ends when the two participants find themselves in the same room. We translated the images that the participants saw into text. That description of the room is provided below as soon as a participant enters a given room. The current room description of User A starts with a token <Image A> and the current room description of User B starts with a token <Image B>. Every utterance from A or B is preceded with a timestamp closed under brackets.\nFollowing is the dialog history along with image descriptions :\n"
     prompt = "Instructions : Here is a conversation between two Participants A and B who are in a virtual space that has lots of different rooms that are depicted with images. Each room has a type (such as kitchen, bathroom, bedroom, etc.).  The participants are initially located in different rooms. The goal of the game is for the two participants to locate themselves in the same room. In order to achieve this goal, the participants communicate with one another by text and describe the room they find themselves in. On the basis of those descriptions, they move to different rooms and describe their new room to the other participant. The game ends when the two participants find themselves in the same room. We translated the images that the participants saw into text. That description of the room is provided below as soon as a participant enters a given room. The current room description of User A starts with a token <Image A> and the current room description of User B starts with a token <Image B>. Every utterance from A or B is preceded with a timestamp closed under brackets.\nFollowing is the dialog history along with image descriptions :\n"
+    if processing == "summary":
+        prompt = "Instructions : Here is a summary of a conversation between two Participants A and B who are in a virtual space that has lots of different rooms that are depicted with images. Each room has a type (such as kitchen, bathroom, bedroom, etc.).  The participants are initially located in different rooms. The goal of the game is for the two participants to locate themselves in the same room. In order to achieve this goal, the participants communicate with one another by text and describe the room they find themselves in. On the basis of those descriptions, they move to different rooms and describe their new room to the other participant. The game ends when the two participants find themselves in the same room. The current room description of User A starts with a token <Image A> and the current room description of User B starts with a token <Image B>. Every utterance from A or B is preceded with a timestamp closed under brackets.\nFollowing is the summary with the last utterances :\n"
+    if processing == "rag":
+        prompt = "Instructions : Here are the retrieved otturances of a conversation between two Participants A and B who are in a virtual space that has lots of different rooms that are depicted with images. Each room has a type (such as kitchen, bathroom, bedroom, etc.). The participants are initially located in different rooms. The goal of the game is for the two participants to locate themselves in the same room. In order to achieve this goal, the participants communicate with one another by text and describe the room they find themselves in. On the basis of those descriptions, they move to different rooms and describe their new room to the other participant. The game ends when the two participants find themselves in the same room. Every utterance from A or B is preceded with a timestamp closed under brackets.\nFollowing is the retrieved otturances :\n"
+
     return prompt
 
 
 
 def get_end_prompt(user="A"):
     # here probably just as him to just answer the question 
-    prompt = "\nPlease provide the next utterance by answering the question of user "
-    if user == "A":
-        prompt += "B"
-    else:
-        prompt += "A"
-    prompt += " and by keeping in mind that it's a spoken conversation."
+    prompt = "\nPlease provide the next utterance by answering the question of the user "
+    #if user == "A":
+    #    prompt += "B"
+    #else:
+    #    prompt += "A"
+    prompt += "and by keeping in mind that it's a spoken conversation."
     return prompt
 
 
@@ -129,6 +132,9 @@ def make_prompt(df, tokenizer, model_id, file, processing):
                 f.close()
             prompt = get_start_prompt(processing=processing) + rag
 
+        if processing == "only_dialog":
+            return dialog,answer
+        
     prompt += end_prompt
     return prompt, answer
 

@@ -19,7 +19,7 @@ import prompt as prompting
 import os
 import time 
 os.environ['HF_HOME'] = '/home/tcharlot/models/'
-
+os.environ["TOKENIZERS_PARALLELISM"] = "false"  
 def main():
     hf_token = os.environ['HF_TOKEN']
 
@@ -32,18 +32,16 @@ def main():
     #model_id = "google/gemma-2-9b-it"
     
     #TODO remember to run only on A100 40 or 80
-    runs = [FullDialog,
-            SlidingWindow,
-            Summary, 
-            RAG, 
-            InfiniTransformer, 
+    runs = [#FullDialog, # max / 2048 
+            #SlidingWindow, #2048 ?  
+            #Summary, #2048 
+            #RAG, #2048
+            InfiniTransformer, # 2048 * 4 = 8192 
             InfiniTransformerBonus, 
             ChainOfThought, 
             GraphRAG]
 
-    #prompts, answers = prompting.load_prompt("../../data/temporal") #TODO connect to real data
     
-    #dataset = [[{"role":"user","content":prompt}] for prompt in prompts]
     devices = []
 
     if torch.cuda.is_available() :
