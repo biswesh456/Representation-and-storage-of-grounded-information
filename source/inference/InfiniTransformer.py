@@ -1,21 +1,22 @@
 from transformers import AutoTokenizer, pipeline
 import sys
-sys.path.append('../InfiniTransformer/')
-from infini_llama.modeling_infini_llama import LlamaForCausalLM
+#sys.path.append('../InfiniTransformer/')
+from InfiniTransformer.infini_llama.modeling_infini_llama import LlamaForCausalLM
+import InfiniTransformer
 import torch
 import prompt as prompting
-from peft import PeftModel
+from utils import save
 
 def inference(files, **parameters):
-    model_path = "../InfiniTransformer/models/llama-3.1-8b-infini-noclm-8192"
+    model_path = "../models/llama-3.1-8b-infini-noclm-8192"
     tokenizer = AutoTokenizer.from_pretrained(model_path)
     model = LlamaForCausalLM.from_pretrained(
         model_path,
         torch_dtype=torch.bfloat16,
         device_map={"": 0},
     )
-    print(model)
-    print(model.dtype)
+    #print(model)
+    #print(model.dtype)
 
     #model = PeftModel.from_pretrained(model, "../InfiniTransformer/models/llama-3.1-8b-infini-noclm-8192")
     #model.load_adapter("../InfiniTransformer/models/llama-3.1-8b-infini-noclm-8192", adapter_name="infini")
@@ -23,12 +24,13 @@ def inference(files, **parameters):
     
     prompts, answers = prompting.load_prompt(files, tokenizer=tokenizer, model_id=None, processing=None) #TODO connect to real data
 
-    for prompt in prompts:
-        #TODO check the correct prompting
+    for prompt,file in zip(prompts, files):
         with torch.no_grad():
             generated_text = generate_text_with_stateful_segments(
                 model, tokenizer, prompt, max_length=512, temperature=0.8
             )
+        save(generated_text[2:], parameters["run"], file, "llama-3.1-8b-infini-noclm-8192")
+        
         print("Short-Generated(512) Text: \n", generated_text)
 
         print("-" * 40)
@@ -47,9 +49,9 @@ def generate_text_with_stateful_segments(
     # gpu_tracker.track()
 
     # Encode the prompt text
-    encoded_input = tokenizer(prompt_text, return_tensors="pt")
-    input_ids = encoded_input["input_ids"]
-
+    input_ids = tokenizer.apply_chat_template([{"role":"user", "content":prompt_text}], return_tensors="pt", add_generation_prompt=True)
+    #print(tokenizer.decode(input_ids[0]))
+    
     original_length = len(input_ids[0])  # Get the original length of the prompt
     print("Original seq len:", original_length)
 
@@ -85,7 +87,7 @@ def generate_text_with_stateful_segments(
     generated_sequence = input_ids
     print("Target seq len:", original_length + max_length)
     while generated_sequence.size(1) < original_length + max_length:
-        # print("generated_sequence.size(1):", generated_sequence.size(1))
+        #print("generated_sequence.size(1):", generated_sequence.size(1))
         past = None
         # if generated_sequence.size(1) over segment_length, re-compute memory and norm_term
         if generated_sequence.size(1) % segment_length == 0:
@@ -141,10 +143,15 @@ def generate_text_with_stateful_segments(
             # gpu_tracker.track()
 
         # # Break the loop if we reach max_length
-        # if generated_sequence.size(1) >= max_length:
-        #     break
+        #if generated_sequence.size(1) >= max_length:
+        #    break
+        
+        # Break the loop if model has ended the message
+        #print(tokenizer.decode(next_token[0]))#, end='')
+        if 128009 in next_token:
+            break
 
     # Decode the generated tokens to text
-    generated_text = tokenizer.decode(generated_sequence[0], skip_special_tokens=True)
+    generated_text = tokenizer.decode(generated_sequence[0][original_length-1:], skip_special_tokens=True)
 
     return generated_text.replace(prompt_text, "")

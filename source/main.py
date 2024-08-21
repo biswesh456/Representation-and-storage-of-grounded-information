@@ -32,10 +32,10 @@ def main():
     #model_id = "google/gemma-2-9b-it"
     
     #TODO remember to run only on A100 40 or 80
-    runs = [#FullDialog, # max / 2048 
-            #SlidingWindow, #2048 ?  
-            #Summary, #2048 
-            #RAG, #2048
+    runs = [FullDialog, # max / 2048 
+            SlidingWindow, #2048 ?  
+            Summary, #2048 
+            RAG, #2048
             InfiniTransformer, # 2048 * 4 = 8192 
             InfiniTransformerBonus, 
             ChainOfThought, 

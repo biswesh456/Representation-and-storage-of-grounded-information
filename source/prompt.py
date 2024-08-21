@@ -94,7 +94,7 @@ def get_start_prompt(processing):
 
 def get_end_prompt(user="A"):
     # here probably just as him to just answer the question 
-    prompt = "\nPlease provide the next utterance by answering the question of the user "
+    prompt = "\nPlease answer the question of the user by providing only the next utterance "
     #if user == "A":
     #    prompt += "B"
     #else:
@@ -116,10 +116,11 @@ def make_prompt(df, tokenizer, model_id, file, processing):
         if processing == "windowed":
             prompt_len = len(input_ids[0]) + len(input_ids[1]) + len(input_ids[2])
             split_tok = tokenizer("\n")['input_ids'][1]
-            if prompt_len > 3996:
-                offset_size = prompt_len - 3996
+            if prompt_len > 1850:
+                offset_size = prompt_len - 1850
                 indexes = [i for i,t in enumerate(input_ids[1]) if (t == split_tok) and (i < offset_size)]
                 dialog = dialog[offsets[1][indexes[-1]][-1]:]
+            prompt += dialog
             #generate summaries if not existing
         if processing == "summary":
             with open("../data/Summary/"+ utils.MODELS[model_id] + "/" + file.split("/")[-1].split(".")[0] + ".txt") as f:
