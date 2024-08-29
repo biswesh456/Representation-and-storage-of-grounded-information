@@ -43,7 +43,7 @@ from tqdm.auto import tqdm
 import numpy as np
 
 import sys
-sys.path.append('../source/')
+sys.path.append('../')
 from prompt import load_prompt
 from glob import glob
 
@@ -477,23 +477,37 @@ def main():
         print(
             f"trainable params: {trainable_params} || all params: {all_param} || trainable%: {100 * trainable_params / all_param}"
         )
-
+    #print(model)
+    #for name, _ in model.named_parameters():
+    #    print(name)
     # Get LORA configurations and wrap the model in it for efficient finetuning
     lora_config = LoraConfig(
         r=8,
         lora_alpha=32,
-        target_modules=["q_proj","k_proj","v_proj","o_proj"],
+        target_modules=["q_proj","k_proj","v_proj","o_proj","gate"],
         # target_modules = ['q_proj','k_proj','v_proj','o_proj','gate_proj','down_proj','up_proj','lm_head'] #If targeting all linear layers
         lora_dropout=0.1,
         bias="lora_only",
         modules_to_save=["decode_head"],
     )
-    print(type(model))
-    #print_trainable_parameters(model)
+    #print(type(model))
+    print_trainable_parameters(model)
     # model_prepared = prepare_model_for_kbit_training(model, use_gradient_checkpointing=True)
     model = get_peft_model(model, lora_config)
+    print("PARAMETERS::::")
+    #for param in model.attn.parameters():
+    #    print(param)
     #print_trainable_parameters(model)
+    #print(model)
 
+    print_trainable_parameters(model)
+
+    for name, param in model.named_parameters():
+        if "self_attn.gate" in name:
+            print(name)
+            param.requires_grad = True
+    
+    print_trainable_parameters(model)
     # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
     # on a small vocab and want a smaller embedding size, remove this test.
     embedding_size = model.get_input_embeddings().weight.shape[0]
@@ -619,7 +633,7 @@ def main():
         collate_fn=default_data_collator,
         batch_size=args.per_device_eval_batch_size,
     )
-
+    print(len(train_dataloader))
     # Optimizer
     # Split weights in two groups, one with weight decay and the other not.
     no_decay = ["bias", "layer_norm.weight"]

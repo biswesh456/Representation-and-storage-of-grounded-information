@@ -14,8 +14,8 @@ import chromadb
 
 
 
-
 def get_dialog(df, user="A", img=True):
+    user = df["user"].array[-1]# handles the right selection of the user
     image_df = pd.read_csv("../../LLM-Grounding-Study/data/image_descriptions_all_final.csv")
 
     image_descriptions_dict = {}
@@ -94,58 +94,70 @@ def get_start_prompt(processing):
 
 def get_end_prompt(user="A"):
     # here probably just as him to just answer the question 
-    prompt = "\nPlease answer the question of the user by providing only the next utterance "
-    #if user == "A":
-    #    prompt += "B"
-    #else:
-    #    prompt += "A"
-    prompt += "and by keeping in mind that it's a spoken conversation."
+    prompt = "\nPlease answer the question of the user by providing only the next utterance and by keeping in mind that it's a spoken conversation."
     return prompt
 
 
-def make_prompt(df, tokenizer, model_id, file, processing):
+def make_prompt(df, tokenizer, model_id, file, processing, CoT, dataset_name=None):
     prompt = get_start_prompt(processing=processing)
     dialog, answer = get_dialog(df)
-    end_prompt = get_end_prompt()
+    
+    if CoT : 
+        end_prompt = "\nThink before you write the answer in <thinking> tags. First think through what is the answer to the question of the user. Then using your analysis answer the question of the user by formatting the answer as the next utterance and by keeping in mind it's a dialog"
+
+    else:
+        end_prompt = get_end_prompt()
+
     tokenized = tokenizer([prompt, dialog, end_prompt], return_offsets_mapping=True)
     offsets = tokenized["offset_mapping"]
     input_ids = tokenized["input_ids"]
+
     if processing is None:
         prompt += dialog
     else: 
         if processing == "windowed":
             prompt_len = len(input_ids[0]) + len(input_ids[1]) + len(input_ids[2])
             split_tok = tokenizer("\n")['input_ids'][1]
-            if prompt_len > 1850:
+            if prompt_len > 1840:
                 offset_size = prompt_len - 1850
-                indexes = [i for i,t in enumerate(input_ids[1]) if (t == split_tok) and (i < offset_size)]
-                dialog = dialog[offsets[1][indexes[-1]][-1]:]
+                indexes = [i for i,t in enumerate(input_ids[1]) if (t == split_tok) and i > offset_size]
+                #indexes = [i for i in indexes if (i > offset_size)]
+                #edge case where prompt_len too close to 1850   
+                if indexes == []:
+                    for i,t in enumerate(input_ids[1]):
+                        if t == split_tok:
+                            indexes = [i]
+                            break
+                dialog = dialog[offsets[1][indexes[0]][-1]:]
             prompt += dialog
             #generate summaries if not existing
         if processing == "summary":
-            with open("../data/Summary/"+ utils.MODELS[model_id] + "/" + file.split("/")[-1].split(".")[0] + ".txt") as f:
+            with open("../data/Summary/"+dataset_name+ "/" + utils.MODELS[model_id] + "/" + file.split("/")[-1].split(".")[0] + ".txt") as f:
                 summary = f.read()
                 f.close()
             prompt = get_start_prompt(processing=processing) + summary
         if processing == "rag":
-            with open("../data/RAG/"+ file.split("/")[-1].split(".")[0] + ".txt") as f:
+            with open("../data/RAG/"+dataset_name+ "/"+ file.split("/")[-1].split(".")[0] + ".txt") as f:
                 rag = f.read()
                 f.close()
             prompt = get_start_prompt(processing=processing) + rag
 
         if processing == "only_dialog":
             return dialog,answer
-        
+    
     prompt += end_prompt
+    
     return prompt, answer
 
 
-def load_prompt(files, tokenizer, model_id, processing=None):
+def load_prompt(files, tokenizer, model_id, processing=None, CoT=False, dataset_name=None):
     prompts = []
     answers = []
     for f in files : 
+        #print(f)
         df = pd.read_csv(f)
-        prompt, answer = make_prompt(df, tokenizer, model_id, f, processing)
+        prompt, answer = make_prompt(df, tokenizer, model_id, f, processing, CoT, dataset_name)
+        #print(len(tokenizer(prompt)['input_ids']))
         prompts += [prompt]
         answers += [answer]
     return prompts, answers
@@ -158,7 +170,9 @@ def make_summaries(pipe, files, **parameters):
         model_id = parameters.pop("model_id")
     start = get_start_prompt(processing="noprocessing")
     end = "\nSummarize the conversation without missing any information in less than 200 words."
-    files = get_files(run, model_id, optional_arg=run.__name__.split('.')[-1])
+    files = get_files(run, model_id, optional_arg=run.__name__.split('.')[-1], dataset_name=parameters["dataset_name"])
+    params = dict(parameters)
+    dataset_name = params.pop("dataset_name")
     for f in tqdm(files) : 
         df = pd.read_csv(f)
         dialog, answer = get_dialog(df)
@@ -167,8 +181,8 @@ def make_summaries(pipe, files, **parameters):
         for d in split_dialog:
             last_n += d + "\n"
         last_n = last_n[:-3]
-        summary = pipe([{"role":"user","content":start+dialog+end}], max_new_tokens=300, **parameters)
-        save(summary[0]['generated_text'] +"\n"+ last_n, run, f, model_id, run.__name__.split(".")[-1])
+        summary = pipe([{"role":"user","content":start+dialog+end}], max_new_tokens=300, **params)
+        save(summary[0]['generated_text'] +"\n"+ last_n, run, f, model_id, run.__name__.split(".")[-1], dataset_name=dataset_name)
 
 
 def make_rag(pipe, files, **parameters):
@@ -184,8 +198,8 @@ def make_rag(pipe, files, **parameters):
 
 
     start = get_start_prompt(processing="rag")
-    end = get_end_prompt() #TODO modify prompts
-    files = get_files(run, "", optional_arg=run.__name__.split('.')[-1])
+    end = get_end_prompt()
+    files = get_files(run, "", optional_arg=run.__name__.split('.')[-1], dataset_name=parameters["dataset_name"])
     print("Processing RAG, files : ", len(files))
     for f in tqdm(files) : 
         df = pd.read_csv(f)
@@ -209,7 +223,7 @@ def make_rag(pipe, files, **parameters):
             chunks += [temp_chunk]
             documents += [Document(page_content=temp_chunk)]
 
-        chroma_client = chromadb.PersistentClient(path="../data/RAGdatabase/db")
+        chroma_client = chromadb.PersistentClient(path="../data/RAGdatabase/db"+"/"+parameters["dataset_name"])
         colname = f.split("/")[-1].split(".")[0]
         if colname in [c.name for c in chroma_client.list_collections()]:
             continue
@@ -230,7 +244,7 @@ def make_rag(pipe, files, **parameters):
             prompt += d + "\n"
 
         prompt += query
-        save(prompt, run, f, "", run.__name__.split(".")[-1])
+        save(prompt, run, f, "", run.__name__.split(".")[-1], dataset_name=parameters["dataset_name"])
 
 def pre_generate(pipe, files, **parameters):
 

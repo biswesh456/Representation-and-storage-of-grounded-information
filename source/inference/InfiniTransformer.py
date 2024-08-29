@@ -6,9 +6,20 @@ import InfiniTransformer
 import torch
 import prompt as prompting
 from utils import save
+import time
+import random as rn
+import numpy as np
+
+
 
 def inference(files, **parameters):
-    model_path = "../models/llama-3.1-8b-infini-noclm-8192"
+    SEED = 42
+    rn.seed(SEED)
+    torch.manual_seed(SEED)
+    torch.cuda.manual_seed(SEED)
+    np.random.seed(SEED)
+
+    model_path = "../models/llama-3.1-8b-infini-noclm-gated"
     tokenizer = AutoTokenizer.from_pretrained(model_path)
     model = LlamaForCausalLM.from_pretrained(
         model_path,
@@ -16,25 +27,30 @@ def inference(files, **parameters):
         device_map={"": 0},
     )
     #print(model)
+    for name, _ in model.named_parameters():
+        print(name)
     #print(model.dtype)
 
     #model = PeftModel.from_pretrained(model, "../InfiniTransformer/models/llama-3.1-8b-infini-noclm-8192")
     #model.load_adapter("../InfiniTransformer/models/llama-3.1-8b-infini-noclm-8192", adapter_name="infini")
     #model.set_adapter("infini")
     
-    prompts, answers = prompting.load_prompt(files, tokenizer=tokenizer, model_id=None, processing=None) #TODO connect to real data
-
+    prompts, answers = prompting.load_prompt(files, tokenizer=tokenizer, model_id=None, processing=None, CoT=parameters["CoT"], dataset_name=parameters["dataset_name"]) #TODO connect to real data
+    start = time.process_time()
     for prompt,file in zip(prompts, files):
+        print(file)
         with torch.no_grad():
             generated_text = generate_text_with_stateful_segments(
                 model, tokenizer, prompt, max_length=512, temperature=0.8
             )
-        save(generated_text[2:], parameters["run"], file, "llama-3.1-8b-infini-noclm-8192")
+        save(generated_text[2:], parameters["run"], file, "llama-3.1-8b-infini-noclm-gated", CoT=parameters["CoT"], dataset_name=parameters["dataset_name"])
         
         print("Short-Generated(512) Text: \n", generated_text)
 
         print("-" * 40)
+    end = time.process_time()
 
+    return end-start
 
 def generate_text_with_stateful_segments(
     model,
@@ -88,6 +104,7 @@ def generate_text_with_stateful_segments(
     print("Target seq len:", original_length + max_length)
     while generated_sequence.size(1) < original_length + max_length:
         #print("generated_sequence.size(1):", generated_sequence.size(1))
+        print("gen_seq_size", generated_sequence.size(1))
         past = None
         # if generated_sequence.size(1) over segment_length, re-compute memory and norm_term
         if generated_sequence.size(1) % segment_length == 0:
@@ -97,16 +114,25 @@ def generate_text_with_stateful_segments(
                 input_ids=input_segment.to(model.device),
                 memory=memory,
                 norm_term=norm_term,
+                no_memory_update=False,
+                use_cache=True, 
+                past_key_values=past,
             )
+            #past = outputs.past_key_values
             # gpu_tracker.track()
             # Update memory and norm_term for the next, new segment
             memory = outputs.memory
             norm_term = outputs.norm_term
-
+            #print("mem", memory, flush=True)
+            #print("norm", norm_term, flush=True)
             # gpu_tracker.track()
             next_token_logits = outputs.logits[:, -1, :]
+            print("nexttoklog", next_token_logits, flush=True)
             scaled_logits = next_token_logits / temperature
+            print("scaledlog", scaled_logits, flush=True)
             probs = torch.nn.functional.softmax(scaled_logits, dim=-1)
+            print("probs", probs, flush=True)
+            print("scaled_logits", scaled_logits, flush=True)
             next_token = torch.multinomial(probs, num_samples=1).detach()
 
             # Append to the generated sequence
@@ -128,6 +154,9 @@ def generate_text_with_stateful_segments(
                 past_key_values=past,
             )
             past = outputs.past_key_values
+            #if generated_sequence.size(1) < 2048:
+                #print("mem", memory, flush=True)
+            #print("norm", norm_term, flush=True)
             # gpu_tracker.track()
 
             # Obtain the last token predictions and sample
@@ -141,6 +170,7 @@ def generate_text_with_stateful_segments(
                 (generated_sequence, next_token.to("cpu")), dim=1
             )
             # gpu_tracker.track()
+
 
         # # Break the loop if we reach max_length
         #if generated_sequence.size(1) >= max_length:

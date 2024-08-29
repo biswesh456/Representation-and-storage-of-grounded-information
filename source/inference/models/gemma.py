@@ -17,6 +17,7 @@ def inference(files,
               tokenizer,
               verbose=False,
               processing=None,
+              CoT=False,
               **kwargs):
     
     
@@ -42,11 +43,12 @@ def inference(files,
                     )
     parameters ={"model_id":model_id,
                  "run":run,
-                 "kwargs": kwargs}
+                 "kwargs": kwargs,
+                 "dataset_name":kwargs["dataset_name"]}
 
     prompting.pre_generate(pipe, files, **parameters)
 
-    prompts, answers = prompting.load_prompt(files, tokenizer=pipe.tokenizer, model_id=model_id, processing=processing) #TODO connect to real data
+    prompts, answers = prompting.load_prompt(files, tokenizer=pipe.tokenizer, model_id=model_id, processing=processing, CoT=CoT,dataset_name=kwargs["dataset_name"]) #TODO connect to real data
     
     dataset = [[{"role":"user","content":prompt}] for prompt in prompts]
 
@@ -59,8 +61,8 @@ def inference(files,
     res = [] 
     #res = [out for out in tqdm(pipe(dataset))]
     for out, file in zip(tqdm(pipe(dataset)), files): 
-        save(out[0]['generated_text'], run, file, model_id)
+        save(out[0]['generated_text'], run, file, model_id, CoT=CoT, dataset_name=kwargs["dataset_name"])
                                    
     end = time.process_time()
     print("time : ", end-start)
-    return res
+    return end-start

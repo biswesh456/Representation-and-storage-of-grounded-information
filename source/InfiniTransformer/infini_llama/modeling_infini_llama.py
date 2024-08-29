@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch Llama model, with Infini-Attention."""
-
+import time
 import os
 import math
 import warnings
@@ -993,10 +993,10 @@ class LlamaInfiniAttention(LlamaAttention):
             memory = {}
             norm_term = {}
             memory_output = None
-        else:
+        #else:
             # Infini Attention memory does not use PE
             # Memory retrieval and attention calculation per segment
-            memory_output = self._retrieve_from_memory(
+        memory_output = self._retrieve_from_memory(
                 query_states,
                 memory.get(self.layer_idx, None) if memory is not None else None,
                 norm_term.get(self.layer_idx, None) if norm_term is not None else None,
@@ -1071,10 +1071,19 @@ class LlamaInfiniAttention(LlamaAttention):
         if memory_output is None:
             combined_output = attn_output
         else:
+            #print("COMIBINING OUTPUTS")
+            #print(self.gate)
+            #print(F.sigmoid(self.gate))
+            #self.gate = torch.nan_to_num(self.gate, nan=0.0)
             combined_output = (
                 F.sigmoid(self.gate) * memory_output
                 + (1 - F.sigmoid(self.gate)) * attn_output
             )
+            #TODO Trick 
+            #combined_output = (
+            #    F.sigmoid(torch.nan_to_num(self.gate, nan=0.0)) * memory_output
+            #    + (1 - F.sigmoid(torch.nan_to_num(self.gate, nan=0.0))) * attn_output
+            #)
 
         # Prepare output for this segment
         combined_output = combined_output.transpose(1, 2).contiguous()
@@ -1112,7 +1121,7 @@ class LlamaInfiniAttention(LlamaAttention):
             query_states,
             memory.repeat(1, self.num_key_value_groups, 1, 1),
         )
-
+        #print(memory_output)
         debug_print("[Retrieve] memory_output.shape", memory_output.shape)
         debug_print("[Retrieve] self.norm_term.shape", norm_term.shape)
 
@@ -1137,6 +1146,10 @@ class LlamaInfiniAttention(LlamaAttention):
         key_states = F.elu(key_states) + 1  # Apply ELU activation
 
         if memory is not None:
+            #time.sleep(3)
+            #print("inside memory",memory, flush=True)
+            #print("keystatetranspose", key_states.transpose(-2, -1))
+            #print("valuestatss", value_states)
             memory = memory + torch.matmul(key_states.transpose(-2, -1), value_states)
         else:
             memory = torch.matmul(key_states.transpose(-2, -1), value_states)
@@ -1295,6 +1308,7 @@ class LlamaPreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
 
     def _init_weights(self, module):
+        #print(module)
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)

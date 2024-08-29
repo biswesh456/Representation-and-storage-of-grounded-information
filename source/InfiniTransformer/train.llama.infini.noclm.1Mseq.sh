@@ -11,7 +11,7 @@ accelerate launch --num_processes=1 --mixed_precision='bf16' \
     --train_file='~/data/temporal/' \
     --per_device_train_batch_size=1 \
     --per_device_eval_batch_size=1 \
-    --output_dir='./models/llama-3.1-8b-infini-noclm-8192' \
+    --output_dir='../models/llama-3.1-8b-infini-noclm-gated' \
     --checkpointing_steps=1000 \
     --num_train_epochs=1 \
     --learning_rate=1e-4 \
