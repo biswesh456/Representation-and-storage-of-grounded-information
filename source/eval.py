@@ -7,6 +7,13 @@ import numpy as np
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
+def fuzzy_EM(pred, ref):
+    pred = pred.lower()
+    ref = ref.lower()
+    ref = ref.split(" ")
+    nb_union = [True if r in pred else False for r in ref]
+    return np.mean(nb_union)
+
 bertscore = load("bertscore")
 exact_match = load("exact_match")
 
@@ -48,7 +55,7 @@ for d in directories:
         temp_file = file.split("/")[-1].split(".")[0]
         with open(file, "r") as f:
             lines = f.readlines()
-            label = lines[0]
+            label = lines[0][:-1]
             exact_label = lines[1]
             f.close()
         labels[temp_d][temp_file] = label
@@ -56,7 +63,7 @@ for d in directories:
 
 
 with open("../data/results.csv", "w") as f:
-    f.write("model,relation,inference,precision,recall,f1,EM")
+    f.write("model,relation,inference,precision,recall,f1,EM,fEM")
     f.close()
 for model in models:
     print(model)
@@ -76,14 +83,16 @@ for model in models:
             predictions = []
             references = []
             exact_references = []
+            fEM = []
             for file in models[model][relation][infer]:
                 predictions += [models[model][relation][infer][file]]
                 references += [labels[relation][file]]
+                
                 #print(exact_labels[relation][file], models[model][relation][infer][file])
                 bertscore.add(references=labels[relation][file],
                               predictions=models[model][relation][infer][file])
                 exact_references += [exact_labels[relation][file]]
-                
+                fEM += [fuzzy_EM(predictions[-1], exact_references[-1])]
                 #exact_match.add(references=exact_labels[relation][file],
                 #         predictions=models[model][relation][infer][file])
             #print(exact_references)
@@ -93,7 +102,7 @@ for model in models:
             #results = bertscore.score(predictions=predictions, references=references, lang="en")
             
             with open("../data/results.csv", "a") as f:
-                f.write("\n"+model + ","+relation+","+infer+","+ str("%.2f" % np.mean(results['precision'])) + "," + "%.2f" % np.mean(results['recall'])+ "," + "%.2f" % np.mean(results['f1'])+ "," + "%.2f" % round(em_results["exact_match"]))
+                f.write("\n"+model + ","+relation+","+infer+","+ str("%.2f" % np.mean(results['precision'])) + "," + "%.2f" % np.mean(results['recall'])+ "," + "%.2f" % np.mean(results['f1'])+ "," + "%.2f" % round(em_results["exact_match"])+ "," + "%.2f" % np.mean(fEM))
                 f.close()
             #print(model, relation, infer, results)
             print(infer)
