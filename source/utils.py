@@ -12,7 +12,9 @@ MODELS = {"meta-llama/Meta-Llama-3-8B-Instruct":"Llama3-8B-it",
           "google/gemma-2-27b-it":"Gemma-2-27B-it",
           "google/gemma-2-9b-it":"Gemma-2-9B-it",
           "llama-3.1-8b-infini-noclm-8192": "Infini-Llama3.1-8B-it-8192",
-          "llama-3.1-8b-infini-noclm-gated": "Infini-Llama3.1-8B-it-gated"
+          "llama-3.1-8b-infini-noclm-gated": "Infini-Llama3.1-8B-it-gated",
+          "google/gemma-2-2b-it":"Gemma-2-2B-it",
+          "mistralai/Mistral-Nemo-Instruct-2407": "Mistral-Nemo-it"
         }
 
 def save(data, run, file, model_id, optional_arg=None, CoT=False, dataset_name=None):
@@ -38,7 +40,7 @@ def get_files(run, model_id, optional_arg=None, CoT=False, dataset_name=None):
     #must return the files that have not been executed
     if run == "InfiniTransformer" : 
         model_id = "Infini-Llama3.1-8B-it-8192"
-    dataset = glob("../data/meetup_target/"+dataset_name+"/*.csv") #TODO change to real dataset
+    dataset = glob("../data/meetup_target/"+dataset_name+"/*.csv")
     files = None
     if CoT:
         CoT_str = "CoT"
@@ -55,7 +57,7 @@ def get_files(run, model_id, optional_arg=None, CoT=False, dataset_name=None):
         temp_dataset = set([f.split("/")[-1].split(".")[0] for f in dataset])
         files = list(temp_dataset - temp_existing)
         #print(files)
-        files = ["../data/meetup_target/"+dataset_name+"/"+f+".csv" for f in files]#TODO change to real dataset
+        files = ["../data/meetup_target/"+dataset_name+"/"+f+".csv" for f in files]
     else: 
         print("Not implemented :", run.__name__.split(".")[-1]  )
         files = dataset

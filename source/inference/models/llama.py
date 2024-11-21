@@ -58,12 +58,12 @@ def inference(files,
 
     prompts, answers = prompting.load_prompt(files, tokenizer=pipe.tokenizer, model_id=model_id, processing=processing, CoT=CoT, dataset_name=kwargs["dataset_name"]) #TODO connect to real data
     
+    #print(prompts)
+    #for a,f in zip(answers,files):
+    #    save(a, run, f, model_id, optional_arg="answers", CoT=CoT, dataset_name=kwargs["dataset_name"])
+        #print(a,f)
 
-    for a,f in zip(answers,files):
-        save(a, run, f, model_id, optional_arg="answers", CoT=CoT, dataset_name=kwargs["dataset_name"])
-        print(a,f)
-
-    print(answers)
+    #print(answers)
     dataset = [[{"role":"user","content":prompt}] for prompt in prompts]
 
     if verbose: 

@@ -26,7 +26,7 @@ def inference(files,
         attn_implementation = 'sdpa'
     else : 
         attn_implementation = 'flash_attention_2'
-        attn_implementation = 'sdpa'
+        #attn_implementation = 'sdpa'
         #attn_implementation = 'eager'
     
 

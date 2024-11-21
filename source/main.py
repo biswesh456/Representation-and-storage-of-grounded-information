@@ -1,11 +1,13 @@
 #!/usr/bin/env python
 # coding: utf-8
 import os
+os.environ['HF_HOME'] = '/data/almanach/user/cdearauj/models/'
 import json
 import sys
 import argparse
 import torch
 from datasets import load_dataset, Dataset
+
 from transformers import pipeline, LlamaForCausalLM, LlamaTokenizer, AutoTokenizer, AutoModelForCausalLM
 from tqdm import tqdm
 from transformers.pipelines.pt_utils import KeyDataset
@@ -13,14 +15,13 @@ from transformers.pipelines.pt_utils import KeyDataset
 import numpy as np 
 import random as rn
 
-from inference import FullDialog, SlidingWindow, Summary, RAG, InfiniTransformer, InfiniTransformerBonus, ChainOfThought, GraphRAG
+from inference import FullDialog, SlidingWindow, Summary, RAG, RAGBM25, InfiniTransformer, InfiniTransformerBonus, ChainOfThought, GraphRAG
 from utils import save, get_files, MODELS
 
 import prompt as prompting
 import os
 import time 
-os.environ['HF_HOME'] = '/home/tcharlot/models/'
-os.environ["TOKENIZERS_PARALLELISM"] = "false"  
+
 
 def init_seeds():
     SEED = 42
@@ -41,16 +42,22 @@ def parse_args():
     )
 
     parser.add_argument(
-        "----model_name_or_path",
+        "--model",
         type=str,
         default=None,
         help="Repo of the model you want to use",
+    )
+    parser.add_argument(
+        "--cot",
+        action='store_true',
+        help="With or without Chain of Thought",
     )
     args = parser.parse_args()
     return args
 
 def main():
 
+    
     init_seeds()
 
     args = parse_args()
@@ -58,18 +65,26 @@ def main():
     hf_token = os.environ['HF_TOKEN']
 
     #TODO Jobs should be ran with different models through code args
+    if args.model is None :
+        model_id = "meta-llama/Meta-Llama-3.1-8B-Instruct"
+        #model_id = "meta-llama/Meta-Llama-3-70B-Instruct"
+        #model_id = "google/gemma-2-27b-it"
+        #model_id = "google/gemma-2-9b-it"
+        #model_id = "google/gemma-2-2b-it" # not implemented
+    else : 
+        model_id = args.model
 
-    model_id = "meta-llama/Meta-Llama-3-8B-Instruct"
-    model_id = "meta-llama/Meta-Llama-3.1-8B-Instruct"
-    #model_id = "meta-llama/Meta-Llama-3-70B-Instruct"
-    model_id = "google/gemma-2-27b-it"
-    #model_id = "google/gemma-2-9b-it"
+
     
+    print(args.cot)
+
     #TODO remember to run only on A100 40 or 80
-    runs = [FullDialog, # max / 2048 
-            SlidingWindow, #2048 ?  
-            Summary, #2048 
-            RAG, #2048
+    runs = [
+            #FullDialog, # max / 2048 
+            #SlidingWindow, #2048 ?  
+            #Summary, #2048 
+            #RAG, #2048
+            RAGBM25,
             #InfiniTransformer, # 2048 * 4 = 8192 
             #InfiniTransformerBonus, 
             #ChainOfThought, 
@@ -105,7 +120,7 @@ def main():
                   "model_id":model_id,
                   "devices":devices,
                   "tokenizer":tokenizer,
-                  "CoT":False}
+                  "CoT":args.cot}
 
     print("model id : ", model_id)
     infer_times = []
@@ -125,6 +140,7 @@ def main():
                 model_name = "Infini-Llama3.1-8B-it-8192"
             else :
                 model_name = MODELS[model_id]
+            #execution here
             infer_times = d.split("/")[-1] + ","+ str(parameters["CoT"]) +","+ run.__name__.split(".")[-1] +","+ model_name +","+str(run.inference(model=model, files = files, **parameters))
             path_infer_stats = "../runs/meetup_target/inference_stats.csv"
             if os.path.exists(path_infer_stats):
@@ -135,9 +151,11 @@ def main():
                 with open(path_infer_stats, "w") as f:
                     f.write("Category,Run,model,CoT,time\n"+infer_times)
                     f.close()
-            
 
     print(infer_times)
 
 if __name__ == '__main__':
+    os.environ['HF_HOME'] = '/data/almanach/user/cdearauj/theo/models/'
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"  
+    init_seeds()
     main()

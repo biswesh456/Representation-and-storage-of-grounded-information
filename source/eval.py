@@ -1,6 +1,7 @@
+import os
+os.environ['HF_HOME'] = '/data/almanach/user/cdearauj/models/'
 from evaluate import load
 from glob import glob
-import os
 import numpy as np
 
 
@@ -85,21 +86,23 @@ for model in models:
             exact_references = []
             fEM = []
             for file in models[model][relation][infer]:
-                predictions += [models[model][relation][infer][file]]
+                if "CoT" in infer :
+                    pred = models[model][relation][infer][file].split("</thinking>")
+                    if len(pred) > 1:
+                        pred = pred[-1]
+                    else :
+                        pred = models[model][relation][infer][file].split("<thinking>")[-1]
+                    #trying not to run out of memory because of some model outputs
+                    pred = pred[-6000:]
+                    predictions += [pred]
+                else :
+                    predictions += [models[model][relation][infer][file]]
                 references += [labels[relation][file]]
-                
-                #print(exact_labels[relation][file], models[model][relation][infer][file])
-                bertscore.add(references=labels[relation][file],
-                              predictions=models[model][relation][infer][file])
                 exact_references += [exact_labels[relation][file]]
                 fEM += [fuzzy_EM(predictions[-1], exact_references[-1])]
-                #exact_match.add(references=exact_labels[relation][file],
-                #         predictions=models[model][relation][infer][file])
-            #print(exact_references)
-            results = bertscore.compute(model_type="microsoft/deberta-xlarge-mnli",num_layers=40,lang="en")
+                
+            results = bertscore.compute(predictions=predictions, references=references, model_type="microsoft/deberta-xlarge-mnli",num_layers=40,lang="en", batch_size=32)
             em_results = exact_match.compute(references=exact_references,predictions=predictions,ignore_case=True,ignore_punctuation=True)
-            #print("EXACT_MATCH : ", round(em_results["exact_match"]))
-            #results = bertscore.score(predictions=predictions, references=references, lang="en")
             
             with open("../data/results.csv", "a") as f:
                 f.write("\n"+model + ","+relation+","+infer+","+ str("%.2f" % np.mean(results['precision'])) + "," + "%.2f" % np.mean(results['recall'])+ "," + "%.2f" % np.mean(results['f1'])+ "," + "%.2f" % round(em_results["exact_match"])+ "," + "%.2f" % np.mean(fEM))
@@ -108,6 +111,12 @@ for model in models:
             print(infer)
             
             print("p:", "%.2f" % np.mean(results['precision']), "r:", "%.2f" %np.mean(results['recall']), "f1:", "%.2f" %np.mean(results['f1']))
+    torch.cuda.empty_cache()
+
+
+
+#Bertscore tests       
+"""   
 predictions = ["hello there", "general kenobi"]
 references = ["hello there", "general kenobi"]
 results = bertscore.compute(predictions=["I think it was a landscape with trees"], references=["It was a long painting"], model_type="microsoft/deberta-xlarge-mnli",num_layers=40,lang="en")
@@ -128,3 +137,4 @@ with torch.no_grad():
     scores = torch.sigmoid(model(**inputs, return_dict=True).logits.view(-1, ).float())
 
     print(scores)
+""" 

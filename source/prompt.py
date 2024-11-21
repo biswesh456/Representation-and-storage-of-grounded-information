@@ -7,6 +7,7 @@ import utils
 from inference import Summary
 from tqdm import tqdm
 from langchain_chroma import Chroma
+from langchain_community.retrievers import BM25Retriever
 from langchain_core.documents import Document
 import torch
 
@@ -103,19 +104,19 @@ def make_prompt(df, tokenizer, model_id, file, processing, CoT, dataset_name=Non
     dialog, answer = get_dialog(df)
     
     if CoT : 
-        end_prompt = "\nThink before you write the answer in <thinking> tags. First think through what is the answer to the question of the user. Then using your analysis answer the question of the user by formatting the answer as the next utterance and by keeping in mind it's a dialog"
+        end_prompt = "\nThink between <thinking> tags before you write the answer. First think through what is the answer to the question of the user. Then using your analysis answer the question of the user by formatting the answer as the next utterance and by keeping in mind it's a dialog. Very important don't forget to format your thoughts between <thinking> tags."
 
     else:
         end_prompt = get_end_prompt()
 
-    tokenized = tokenizer([prompt, dialog, end_prompt], return_offsets_mapping=True)
-    offsets = tokenized["offset_mapping"]
-    input_ids = tokenized["input_ids"]
 
     if processing is None:
         prompt += dialog
     else: 
         if processing == "windowed":
+            tokenized = tokenizer([prompt, dialog, end_prompt], return_offsets_mapping=True)
+            offsets = tokenized["offset_mapping"]
+            input_ids = tokenized["input_ids"]
             prompt_len = len(input_ids[0]) + len(input_ids[1]) + len(input_ids[2])
             split_tok = tokenizer("\n")['input_ids'][1]
             if prompt_len > 1840:
@@ -141,9 +142,29 @@ def make_prompt(df, tokenizer, model_id, file, processing, CoT, dataset_name=Non
                 rag = f.read()
                 f.close()
             prompt = get_start_prompt(processing=processing) + rag
+        if processing == "rag_bm25":
+            #TODO retrieve bm25
+            with open("../data/RAGBM25/"+dataset_name+ "/"+ file.split("/")[-1].split(".")[0] + ".txt") as f:
+                rag = f.read()
+                f.close()
+            prompt = get_start_prompt(processing=processing) + rag
 
         if processing == "only_dialog":
             return dialog,answer
+        
+        if processing == "memgpt":
+            split_dialog = dialog.split("\n")
+            if "\n" in split_dialog : 
+                split_dialog.remove("\n")
+            if "" in split_dialog : 
+                split_dialog.remove("")
+            query = split_dialog[-2]
+            split_dialog = split_dialog[:-2]
+            dialog = ""
+            for split in split_dialog:
+                dialog += split + "\n"
+            dialog = dialog[:-1]
+            return prompt, dialog, query
     
     prompt += end_prompt
     
@@ -153,6 +174,19 @@ def make_prompt(df, tokenizer, model_id, file, processing, CoT, dataset_name=Non
 def load_prompt(files, tokenizer, model_id, processing=None, CoT=False, dataset_name=None):
     prompts = []
     answers = []
+
+    if processing == "memgpt":
+        preprompts = []
+        for f in files : 
+            #print(f)
+            df = pd.read_csv(f)
+            preprompt, prompt, answer = make_prompt(df, tokenizer, model_id, f, processing, CoT, dataset_name)
+            #print(len(tokenizer(prompt)['input_ids']))
+            preprompts += [preprompt]
+            prompts += [prompt]
+            answers += [answer]
+        return preprompts, prompts, answers
+    
     for f in files : 
         #print(f)
         df = pd.read_csv(f)
@@ -196,7 +230,6 @@ def make_rag(pipe, files, **parameters):
     if "chunk_size" in parameters['kwargs']:
         chunk_size = parameters['kwargs'].pop("chunk_size")
 
-
     start = get_start_prompt(processing="rag")
     end = get_end_prompt()
     files = get_files(run, "", optional_arg=run.__name__.split('.')[-1], dataset_name=parameters["dataset_name"])
@@ -223,22 +256,27 @@ def make_rag(pipe, files, **parameters):
             chunks += [temp_chunk]
             documents += [Document(page_content=temp_chunk)]
 
-        chroma_client = chromadb.PersistentClient(path="../data/RAGdatabase/db"+"/"+parameters["dataset_name"])
-        colname = f.split("/")[-1].split(".")[0]
-        if colname in [c.name for c in chroma_client.list_collections()]:
-            continue
 
-        collection = chroma_client.create_collection(name=f.split("/")[-1].split(".")[0])
-        collection.add(
-            documents=chunks,
-            embeddings=generate_embeddings(chunks, "document", **parameters),
-            ids=["id" + str(i) for i in range(len(chunks))]
-        )
-        
-        db = Chroma(client=chroma_client, collection_name=colname) 
+        if run.__name__.split(".")[-1] == "RAGBM25":
+            retriever = BM25Retriever.from_documents(documents, k=3)
+            docs = [d.page_content for d in retriever.invoke(query)]
+        else : 
+            chroma_client = chromadb.PersistentClient(path="../data/RAGdatabase/db"+"/"+parameters["dataset_name"])
+            colname = f.split("/")[-1].split(".")[0]
+            if colname in [c.name for c in chroma_client.list_collections()]:
+                continue
 
-        docs = db.similarity_search_by_vector_with_relevance_scores(generate_embeddings(query, "query", **parameters), k=3)
-        docs = [d[0].page_content for d in docs]
+            collection = chroma_client.create_collection(name=f.split("/")[-1].split(".")[0])
+            collection.add(
+                documents=chunks,
+                embeddings=generate_embeddings(chunks, "document", **parameters),
+                ids=["id" + str(i) for i in range(len(chunks))]
+            )
+            
+            db = Chroma(client=chroma_client, collection_name=colname) 
+
+            docs = db.similarity_search_by_vector_with_relevance_scores(generate_embeddings(query, "query", **parameters), k=3)
+            docs = [d[0].page_content for d in docs]
         prompt = ""
         for d in docs : 
             prompt += d + "\n"
@@ -255,6 +293,9 @@ def pre_generate(pipe, files, **parameters):
         make_summaries(pipe, files, **parameters)
     if str_run == "RAG":
         make_rag(pipe, files, **parameters)
+    if str_run == "RAGBM25":
+        parameters
+        make_rag(pipe, files, **parameters)
 
 def generate_embeddings(documents, pre=None, **parameters):
     prefixes = {"query":"Given the question from the user, retrieve relevant otturances that answer the question: ",
@@ -270,3 +311,6 @@ def generate_embeddings(documents, pre=None, **parameters):
     with torch.no_grad():
         embeddings_queries = model(**tok_documents)
     return embeddings_queries.tolist()
+
+
+#def retrieve_bm25(documents)
