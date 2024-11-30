@@ -8,5 +8,5 @@
 # 1 GPU
 #oarsub -p "gpu='YES' and gpumem>30000 and gpucapability>='8.0'" -l /nodes=1/gpunum=1,walltime=00:3:00  -t besteffort --stdout=../data/OARoutput/OAR.%jobid%.stdout --stderr=../data/OARoutput/OAR.%jobid%.stderr ./python_exec
 
-# 1 GPU interactive for dev
-oarsub -p "gpu='YES' and gpumem>35000 and gpucapability>='7.0'" -l /nodes=1/gpunum=1,walltime=01:00:00  -t besteffort --stdout=../data/OARoutput/OAR.%jobid%.stdout --stderr=../data/OARoutput/OAR.%jobid%.stderr -I ./python_exec
+# 1 GPU interactive for dev, this is what I use for memgpt 
+oarsub -p "gpu='YES' and gpumem>35000 and gpucapability>='8.0'" -l /nodes=1/gpunum=1,walltime=03:00:00  -t besteffort --stdout=../data/OARoutput/OAR.%jobid%.stdout --stderr=../data/OARoutput/OAR.%jobid%.stderr -I

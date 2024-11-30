@@ -15,7 +15,7 @@ import chromadb
 
 
 
-def get_dialog(df, user="A", img=True):
+def get_dialog(df, user="A", img=True,return_messages=False):
     user = df["user"].array[-1]# handles the right selection of the user
     image_df = pd.read_csv("../../LLM-Grounding-Study/data/image_descriptions_all_final.csv")
 
@@ -23,6 +23,10 @@ def get_dialog(df, user="A", img=True):
     for i in range(len(image_df)):
         image_descriptions_dict[image_df.iloc[i]['image_path']] = image_df.iloc[i]['description']
 
+    if return_messages:
+        messages = []
+        users = []
+        times = []
     prompt = ""
     second = False
     lastindex = 0
@@ -46,8 +50,13 @@ def get_dialog(df, user="A", img=True):
                 df.loc[index, "time"] = str(time).split(" ")[-1]
             if index != df.index[-1]:
                 prompt += "["+ df.loc[index, "time"] + "] "
+                if return_messages:
+                    times += [df.loc[index, "time"]]
             else : 
                 answer += "["+ df.loc[index, "time"] + "] "
+                if return_messages:
+                        answer_time = time
+                
         else : 
             time = pd.to_datetime(df.loc[index,"time"].split(" ")[-1], format='%H:%M:%S')
             #when there is a change of dialog
@@ -57,18 +66,30 @@ def get_dialog(df, user="A", img=True):
                 time = str(time).split(" ")[-1]
                 if index != df.index[-1]:
                     prompt += "["+ time + "] "
+                    if return_messages:
+                        times += [time]
             else : 
                 time += time_offset
                 time = str(time).split(" ")[-1]
                 if index != df.index[-1]:
                     prompt += "["+ time + "] "
+                    if return_messages:
+                        times += [time]
         
         if index != df.index[-1]:
             prompt += row["user"] + ": "
             prompt += row["msg"]
+            if return_messages:
+                users += [row["user"]]
+                messages += [row["msg"]]
         else : 
+            
             answer += row["user"] + ": "
             answer += row["msg"]
+            if return_messages:
+                answer_time = times.pop(-1)
+                answer_user = row["user"]
+                answer = row["msg"]
         
         prompt += "\n"
         if img :
@@ -76,9 +97,16 @@ def get_dialog(df, user="A", img=True):
                     prompt += "<Image "+ user +"> " + image_descriptions_dict[temp_image.split("/")[-1]] + " <Image "+ user +"> "
                     lastimage = temp_image
                     prompt += "\n"
+                    if return_messages:
+                        messages += ["<Image "+ user +"> " + image_descriptions_dict[temp_image.split("/")[-1]] + " <Image "+ user +"> "]
+                        users += [user]
+                        times += ["-1"]
+
         lasttime = pd.to_datetime(df.loc[index,"time"].split(" ")[-1], format='%H:%M:%S')
         lastindex = index
         
+    if return_messages:
+        return messages, times, users, answer, answer_user, answer_time
     return prompt, answer
 
 
@@ -165,7 +193,8 @@ def make_prompt(df, tokenizer, model_id, file, processing, CoT, dataset_name=Non
                 dialog += split + "\n"
             dialog = dialog[:-1]
             return prompt, dialog, query
-    
+        if processing == "memgpt-messages":
+            return get_dialog(df, return_messages=True)
     prompt += end_prompt
     
     return prompt, answer
@@ -187,6 +216,18 @@ def load_prompt(files, tokenizer, model_id, processing=None, CoT=False, dataset_
             answers += [answer]
         return preprompts, prompts, answers
     
+    if processing == "memgpt-messages":
+        l_messages, l_times, l_users, l_answer, l_answer_user, l_answer_time  = ([],[],[],[],[],[])
+        for f in files: 
+            df = pd.read_csv(f)
+            messages, times, users, answer, answer_user, answer_time = make_prompt(df, tokenizer, model_id, f, processing, CoT, dataset_name)
+            l_messages += [messages]
+            l_times += [times]
+            l_users += [users]
+            l_answer += [answer]
+            l_answer_user += [answer_user]
+            l_answer_time += [answer_time]
+        return l_messages, l_times, l_users, l_answer, l_answer_user, l_answer_time 
     for f in files : 
         #print(f)
         df = pd.read_csv(f)
