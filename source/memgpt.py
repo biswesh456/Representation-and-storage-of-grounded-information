@@ -3,6 +3,7 @@ from letta.schemas.memory import ChatMemory
 from letta import LLMConfig, EmbeddingConfig
 from letta.schemas.message import Message,MessageCreate
 from letta.schemas.letta_message import SystemMessage, UserMessage
+from datetime import datetime 
 from utils import get_files
 import prompt as prompting
 import os
@@ -54,6 +55,21 @@ for d in directories:
     preprompts, prompts, queries = prompting.load_prompt(files, tokenizer=None, model_id=None, processing="memgpt", CoT=False, dataset_name=None)
     messages, times, users, answer, answer_user, answer_time = prompting.load_prompt(files, tokenizer=None, model_id=None, processing="memgpt-messages", CoT=False, dataset_name=None)
     for i,f in enumerate(files):
+        # take "-1" times coming from added image descriptions and interpolate to get new time not breaking code
+        newtime = []
+        for j,t in enumerate(times[i]):
+            if t == "-1":
+                if j == 0:
+                    newtime += [datetime.strptime(times[i][j+1], "%H:%M:%S")]
+                    continue
+                
+                if j == len(times[i])-1:
+                    newtime += [datetime.strptime(times[i][j-1], "%H:%M:%S")]
+                    continue
+                newtime += [datetime.strptime(times[i][j-1], "%H:%M:%S") + ((datetime.strptime(times[i][j+1], "%H:%M:%S") - datetime.strptime(times[i][j-1], "%H:%M:%S")) / 2)]
+            else:
+                newtime += [datetime.strptime(t, "%H:%M:%S")]
+
         if users[i][-1] == "A":
             users[i] = list(map(lambda x: x.replace('A', 'user').replace('B', 'assistant'), users[i]))
         else :
@@ -64,8 +80,8 @@ for d in directories:
                 persona= preprompts[i],
                 human="I'm a default user"
             ),
-            #TODO PUT HOURS FROM DIALOG  IN MEMGPT MESSAGES METADATA
-            initial_message_sequence = [ {"role":users[i][j], "text":m, "user_id":users[i][j]} for j,m in enumerate(messages[i][:-1])]
+            system="Don't forget the params field in the JSON response",#TODO maybe better instructions
+            initial_message_sequence = [ {"role":users[i][j], "text":m, "user_id":users[i][j], "created_at": newtime[j]} for j,m in enumerate(messages[i][:-1])]
         )
         
         
