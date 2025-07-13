@@ -1,7 +1,7 @@
 from letta import create_client
 from letta.schemas.memory import ChatMemory
 from letta import LLMConfig, EmbeddingConfig
-from letta.schemas.message import Message,MessageCreate
+from letta.schemas.message import Message,MessageCreate, Message
 from letta.schemas.letta_message import SystemMessage, UserMessage
 from datetime import datetime 
 from utils import get_files
@@ -40,7 +40,7 @@ client.set_default_llm_config(
         model_endpoint_type="vllm",
         model_endpoint="http://localhost:8000/v1/",
         context_window=8000,
-        model_wrapper="chatml"
+        model_wrapper="chatml-hints-grammar"
     )
 )
 
@@ -77,23 +77,26 @@ for d in directories:
         agent_state = client.create_agent(
             name=d.split("/")[-1] + "_"+f.split("/")[-1].split(".")[0], 
             memory = ChatMemory(
-                persona= preprompts[i],
-                human="I'm a default user"
+                persona= preprompts[i] + "and I always remember to 'send_message' to chat with my user.",
+                human="I'm a default user."
             ),
             system="Don't forget the params field in the JSON response",#TODO maybe better instructions
             initial_message_sequence = [ {"role":users[i][j], "text":m, "user_id":users[i][j], "created_at": newtime[j]} for j,m in enumerate(messages[i][:-1])]
         )
         
         
-        
+        #TODO send_message -> tool_calls
 
         #TODO How do we get the answer from the model ?
-        response = client.user_message(
-            agent_id=agent_state.id,
-            message= messages[i][-1], #last message is the query
-            include_full_message=True #TODO true or not true ?
-        )
-
+        try : 
+            response = client.user_message(
+                agent_id=agent_state.id,
+                message= messages[i][-1], #last message is the query
+                include_full_message=True #TODO true or not true ?
+            )
+        except:
+            #TODO good handling of error
+            print("error")
 
 print("MEMGPT")
 #client.delete_agent("basic_agent")

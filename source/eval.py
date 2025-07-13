@@ -10,6 +10,7 @@ if __name__ == '__main__':
     from vllm import LLM, SamplingParams
     from vllm.sampling_params import GuidedDecodingParams
     import torch
+    torch.multiprocessing.set_start_method('spawn')
     from transformers import AutoModelForSequenceClassification, AutoTokenizer
     import json 
     import gc 
@@ -71,7 +72,6 @@ if __name__ == '__main__':
             questions[temp_d][temp_file] = df.iloc[-2]["msg"]
             labels[temp_d][temp_file] = label
             exact_labels[temp_d][temp_file] = exact_label
-
     llm = LLM("Qwen/Qwen2.5-32B-Instruct", tensor_parallel_size=2)
     guided_decoding_params = GuidedDecodingParams(choice=["True", "False"])
     sampling_params = SamplingParams(guided_decoding=guided_decoding_params)
@@ -80,14 +80,14 @@ if __name__ == '__main__':
         f.write("model,relation,inference,precision,recall,f1,EM,fEM,Judge")
         f.close()
     for model in models:
-        if "Llama" not in model : 
-            continue
         print(model)
         print("models number : ", len(models[model]))
         for relation in models[model]:
             print("relation",relation)
             #print("relation number : ",len(models[model][relation]))
             for infer in models[model][relation]:
+                if os.path.exists("../runs/results_meetup_target_json/"+relation+ "/" + infer + "/"+ model + "/" + models[model][relation][infer][list(models[model][relation][infer].keys())[0]] + '.json'):
+                        continue
                 print(infer)
                 #labels[relation][]
                 nb_files_model = len(models[model][relation][infer])
@@ -103,6 +103,7 @@ if __name__ == '__main__':
                 fEM = []
                 prompts = []
                 for file in models[model][relation][infer]:
+                    
                     if "CoT" in infer :
                         pred = models[model][relation][infer][file].split("</thinking>")
                         if len(pred) > 1:
@@ -111,6 +112,11 @@ if __name__ == '__main__':
                             pred = models[model][relation][infer][file].split("<thinking>")[-1]
                         #trying not to run out of memory because of some model outputs
                         pred = pred[-6000:]
+                        predictions += [pred]
+                    if "QwQ" in model:
+                        pred = models[model][relation][infer][file].split("</think>")[-1]
+                        #trying not to run out of memory because of some model outputs
+                        pred = pred[-2000:]
                         predictions += [pred]
                     else :
                         predictions += [models[model][relation][infer][file]]
@@ -144,8 +150,6 @@ if __name__ == '__main__':
     #torch.cuda.empty_cache()
     #gc.collect()
 
-
-
     for model in models:
         print(model)
         print("models number : ", len(models[model]))
@@ -174,7 +178,12 @@ if __name__ == '__main__':
                         else :
                             pred = models[model][relation][infer][file].split("<thinking>")[-1]
                         #trying not to run out of memory because of some model outputs
-                        pred = pred[-6000:]
+                        pred = pred[-2000:]
+                        predictions += [pred]
+                    if "QwQ" in model:
+                        pred = models[model][relation][infer][file].split("</think>")[-1]
+                        #trying not to run out of memory because of some model outputs
+                        pred = pred[-2000:]
                         predictions += [pred]
                     else :
                         predictions += [models[model][relation][infer][file]]

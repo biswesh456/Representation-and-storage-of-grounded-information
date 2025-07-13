@@ -31,16 +31,28 @@ def inference(files,
     
 
     print("Launching : ", model_id)
-
-    pipe = pipeline("text-generation",
-                    model=model,
-                    tokenizer=tokenizer,
-                    token=hf_token,
-                    max_length=max_length,
-                    device_map="auto",
-                    return_full_text =False,
-                    #add_special_tokens=True,
-                    )
+    if "spot" in kwargs["dataset_name"]:
+        pipe = pipeline("text-generation",
+                        model=model,
+                        tokenizer=tokenizer,
+                        token=hf_token,
+                        max_new_tokens=300,
+                        device_map="auto",
+                        return_full_text =False,
+                        model_kwargs={"torch_dtype": torch.bfloat16},
+                        #add_special_tokens=True,
+                        )
+    else :
+        pipe = pipeline("text-generation",
+                        model=model,
+                        tokenizer=tokenizer,
+                        token=hf_token,
+                        max_length=max_length,
+                        device_map="auto",
+                        return_full_text =False,
+                        model_kwargs={"torch_dtype": torch.bfloat16},
+                        #add_special_tokens=True,
+                        )
     parameters ={"model_id":model_id,
                  "run":run,
                  "kwargs": kwargs,
@@ -48,7 +60,7 @@ def inference(files,
 
     prompting.pre_generate(pipe, files, **parameters)
 
-    prompts, answers = prompting.load_prompt(files, tokenizer=pipe.tokenizer, model_id=model_id, processing=processing, CoT=CoT,dataset_name=kwargs["dataset_name"]) #TODO connect to real data
+    prompts, answers = prompting.load_prompt(files, tokenizer=pipe.tokenizer, model_id=model_id, processing=processing, CoT=CoT,dataset_name=parameters["dataset_name"])
     
     dataset = [[{"role":"user","content":prompt}] for prompt in prompts]
 
@@ -61,7 +73,7 @@ def inference(files,
     res = [] 
     #res = [out for out in tqdm(pipe(dataset))]
     for out, file in zip(tqdm(pipe(dataset)), files): 
-        save(out[0]['generated_text'], run, file, model_id, CoT=CoT, dataset_name=kwargs["dataset_name"])
+        save(out[0]['generated_text'], run, file, model_id, CoT=CoT, dataset_name=parameters["dataset_name"])
                                    
     end = time.process_time()
     print("time : ", end-start)

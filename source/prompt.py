@@ -10,12 +10,42 @@ from langchain_chroma import Chroma
 from langchain_community.retrievers import BM25Retriever
 from langchain_core.documents import Document
 import torch
-
+import json 
 import chromadb
 
+def get_dialog(df,dataset_name, user="A", img=True, return_messages=False):
+    if "spot" in dataset_name:
+        return get_dialog_spot(df, user, img, return_messages)
+    else:
+        return get_dialog_meetup(df, user, img, return_messages)
 
+def get_dialog_spot(df, user="A", img=True,return_messages=False):
+    prompt = ""
+    offset =  datetime.timedelta(0)
+    if return_messages:
+        messages, times, users = [],[],[]
+    for index, row in df.iterrows():
+        if type(row["start_time"]) == float :
+            offset += datetime.timedelta(0,4)
+            row["start_time"] = pd.to_datetime(df.loc[index-1, "start_time"], format='%H:%M:%S')
+        curr_time = str(pd.to_datetime(row["start_time"], format='%H:%M:%S')+offset).split(" ")[-1]
+        
+        if index == len(df)-3:
+            answer = row["utterance"]
+            print("Answer", answer)
+            if return_messages:
+                return messages, times, users, answer, row["speaker"], curr_time
+            break
 
-def get_dialog(df, user="A", img=True,return_messages=False):
+        prompt += "[" + curr_time + "]"  + "[" + row["speaker"]+ "]" +" "+ row["utterance"] + "\n"
+        if return_messages:
+            messages += [row["utterance"]]
+            times += [curr_time]
+            users += [row["speaker"]]
+
+    return prompt, answer
+
+def get_dialog_meetup(df, user="A", img=True,return_messages=False):
     user = df["user"].array[-1]# handles the right selection of the user
     image_df = pd.read_csv("../../LLM-Grounding-Study/data/image_descriptions_all_final.csv")
 
@@ -37,7 +67,7 @@ def get_dialog(df, user="A", img=True,return_messages=False):
     for index, row in df.iterrows():
         temp_image = row[user + "_inst"]
 
-        #if NaN (new otturances)
+        #if NaN (new otturances, happens for the last rows)
         if type(row["time"]) == float:
             time = df.loc[lastindex, "time"].split(" ")[-1]
             time = pd.to_datetime(time, format='%H:%M:%S') + datetime.timedelta(0,4)
@@ -60,14 +90,16 @@ def get_dialog(df, user="A", img=True,return_messages=False):
         else : 
             time = pd.to_datetime(df.loc[index,"time"].split(" ")[-1], format='%H:%M:%S')
             #when there is a change of dialog
-            if time < lasttime :
-                time_offset += lasttime - time
+            #case when date not synced
+            if time <= lasttime :
+                time_offset += datetime.timedelta(0,4)
                 time += time_offset
                 time = str(time).split(" ")[-1]
                 if index != df.index[-1]:
                     prompt += "["+ time + "] "
                     if return_messages:
                         times += [time]
+            #normal utterance where we add the time offset occuring
             else : 
                 time += time_offset
                 time = str(time).split(" ")[-1]
@@ -110,12 +142,23 @@ def get_dialog(df, user="A", img=True,return_messages=False):
     return prompt, answer
 
 
-def get_start_prompt(processing):
+def get_start_prompt(processing, dataset_name):
+
+    if "spot" in dataset_name:
+        prompt = "Instructions : Here is a conversation between two participants A and B who have been provided with two images that are slightly different. Each participant can only look at their own image. In order to finish the task they need to discuss with each other and come up with the differences in both of their images. Once they are confident of finding all the differences in their images they move to the next image. The goal of the game is to find all the differences in the pair of images that the participants are provided. Every utterance from A or B is preceded with a timestamp closed under brackets. The utterances also sometimes include information inside angular brackets <> which means that those words were spoken in lower volume.\nFollowing is the dialog history :\n"
+
+        if processing == "summary":
+            prompt = "Instructions : Here is a summary between two participants A and B who have been provided with two images that are slightly different. Each participant can only look at their own image. In order to finish the task they need to discuss with each other and come up with the differences in both of their images. Once they are confident of finding all the differences in their images they move to the next image. The goal of the game is to find all the differences in the pair of images that the participants are provided. Every utterance from A or B is preceded with a timestamp closed under brackets.\nFollowing is the summary with the last utterances :\n"
+        if processing == "rag" or processing == "local-answer":
+            prompt = "Instructions : Here are the retrieved utturances of a conversations between two participants A and B who have been provided with two images that are slightly different. Each participant can only look at their own image. In order to finish the task they need to discuss with each other and come up with the differences in both of their images. Once they are confident of finding all the differences in their images they move to the next image. The goal of the game is to find all the differences in the pair of images that the participants are provided. Every utterance from A or B is preceded with a timestamp closed under brackets. The utterances also sometimes include information inside angular brackets <> which means that those words were spoken in lower volume.\nFollowing is the retrieved utterances :\n"
+        return prompt
+
+
     prompt = "Instructions : Here is a conversation between two Participants A and B who are in a virtual space that has lots of different rooms that are depicted with images. Each room has a type (such as kitchen, bathroom, bedroom, etc.).  The participants are initially located in different rooms. The goal of the game is for the two participants to locate themselves in the same room. In order to achieve this goal, the participants communicate with one another by text and describe the room they find themselves in. On the basis of those descriptions, they move to different rooms and describe their new room to the other participant. The game ends when the two participants find themselves in the same room. We translated the images that the participants saw into text. That description of the room is provided below as soon as a participant enters a given room. The current room description of User A starts with a token <Image A> and the current room description of User B starts with a token <Image B>. Every utterance from A or B is preceded with a timestamp closed under brackets.\nFollowing is the dialog history along with image descriptions :\n"
     if processing == "summary":
         prompt = "Instructions : Here is a summary of a conversation between two Participants A and B who are in a virtual space that has lots of different rooms that are depicted with images. Each room has a type (such as kitchen, bathroom, bedroom, etc.).  The participants are initially located in different rooms. The goal of the game is for the two participants to locate themselves in the same room. In order to achieve this goal, the participants communicate with one another by text and describe the room they find themselves in. On the basis of those descriptions, they move to different rooms and describe their new room to the other participant. The game ends when the two participants find themselves in the same room. The current room description of User A starts with a token <Image A> and the current room description of User B starts with a token <Image B>. Every utterance from A or B is preceded with a timestamp closed under brackets.\nFollowing is the summary with the last utterances :\n"
-    if processing == "rag":
-        prompt = "Instructions : Here are the retrieved otturances of a conversation between two Participants A and B who are in a virtual space that has lots of different rooms that are depicted with images. Each room has a type (such as kitchen, bathroom, bedroom, etc.). The participants are initially located in different rooms. The goal of the game is for the two participants to locate themselves in the same room. In order to achieve this goal, the participants communicate with one another by text and describe the room they find themselves in. On the basis of those descriptions, they move to different rooms and describe their new room to the other participant. The game ends when the two participants find themselves in the same room. Every utterance from A or B is preceded with a timestamp closed under brackets.\nFollowing is the retrieved otturances :\n"
+    if processing == "rag" or processing == "local-answer":
+        prompt = "Instructions : Here are the retrieved utturances of a conversation between two Participants A and B who are in a virtual space that has lots of different rooms that are depicted with images. Each room has a type (such as kitchen, bathroom, bedroom, etc.). The participants are initially located in different rooms. The goal of the game is for the two participants to locate themselves in the same room. In order to achieve this goal, the participants communicate with one another by text and describe the room they find themselves in. On the basis of those descriptions, they move to different rooms and describe their new room to the other participant. The game ends when the two participants find themselves in the same room. Every utterance from A or B is preceded with a timestamp closed under brackets.\nFollowing is the retrieved utturances :\n"
 
     return prompt
 
@@ -128,8 +171,9 @@ def get_end_prompt(user="A"):
 
 
 def make_prompt(df, tokenizer, model_id, file, processing, CoT, dataset_name=None):
-    prompt = get_start_prompt(processing=processing)
-    dialog, answer = get_dialog(df)
+    prompt = get_start_prompt(processing=processing, dataset_name=dataset_name)
+    print(file)
+    dialog, answer = get_dialog(df, dataset_name)
     
     if CoT : 
         end_prompt = "\nThink between <thinking> tags before you write the answer. First think through what is the answer to the question of the user. Then using your analysis answer the question of the user by formatting the answer as the next utterance and by keeping in mind it's a dialog. Very important don't forget to format your thoughts between <thinking> tags."
@@ -161,21 +205,22 @@ def make_prompt(df, tokenizer, model_id, file, processing, CoT, dataset_name=Non
             prompt += dialog
             #generate summaries if not existing
         if processing == "summary":
-            with open("../data/Summary/"+dataset_name+ "/" + utils.MODELS[model_id] + "/" + file.split("/")[-1].split(".")[0] + ".txt") as f:
-                summary = f.read()
+            with open("../data/Summary/"+dataset_name+ "/" + utils.MODELS[model_id] + "/" + file.split("/")[-1].split(".")[0] + ".json") as f:
+                jdict = json.load(f)
+                summary = jdict["completion"] 
                 f.close()
-            prompt = get_start_prompt(processing=processing) + summary
+            prompt = get_start_prompt(processing=processing, dataset_name=dataset_name) + summary
         if processing == "rag":
             with open("../data/RAG/"+dataset_name+ "/"+ file.split("/")[-1].split(".")[0] + ".txt") as f:
                 rag = f.read()
                 f.close()
-            prompt = get_start_prompt(processing=processing) + rag
+            prompt = get_start_prompt(processing=processing, dataset_name=dataset_name) + rag
         if processing == "rag_bm25":
             #TODO retrieve bm25
             with open("../data/RAGBM25/"+dataset_name+ "/"+ file.split("/")[-1].split(".")[0] + ".txt") as f:
                 rag = f.read()
                 f.close()
-            prompt = get_start_prompt(processing=processing) + rag
+            prompt = get_start_prompt(processing=processing, dataset_name=dataset_name) + rag
 
         if processing == "only_dialog":
             return dialog,answer
@@ -194,7 +239,24 @@ def make_prompt(df, tokenizer, model_id, file, processing, CoT, dataset_name=Non
             dialog = dialog[:-1]
             return prompt, dialog, query
         if processing == "memgpt-messages":
-            return get_dialog(df, return_messages=True)
+            return get_dialog(df,dataset_name, return_messages=True)
+        
+        if processing == "local-answer":
+            prompt = get_start_prompt(processing=processing, dataset_name=dataset_name)
+            messages, times, users, answer, answer_user, answer_time = get_dialog(df, dataset_name, return_messages=True)
+            if "meetup" in dataset_name:
+                splits = file.split("/")
+                local_df = pd.read_csv("../data/meetup_target_lines/"+splits[-2]+".csv")
+                nbline = int(local_df.loc[local_df["file"] == splits[-1]]["line"].iloc[0])
+            else: 
+                nbline = int(df.iloc[-1]["utterance"])
+            offset = 0
+            for i,m in enumerate(messages):
+                if "<image" in m :
+                    offset += 1
+                    continue
+                if (i - 4 - offset > nbline - 4) and (i+4 - offset < nbline) + 4:
+                    prompt += m + "\n"
     prompt += end_prompt
     
     return prompt, answer
@@ -243,14 +305,16 @@ def make_summaries(pipe, files, **parameters):
         run = parameters.pop("run")
     if "model_id" in parameters:
         model_id = parameters.pop("model_id")
-    start = get_start_prompt(processing="noprocessing")
+    if "dataset_name" in parameters['kwargs']:
+        dataset_name = parameters['kwargs'].pop("dataset_name")
+    start = get_start_prompt(processing="noprocessing", dataset_name=dataset_name)
     end = "\nSummarize the conversation without missing any information in less than 200 words."
     files = get_files(run, model_id, optional_arg=run.__name__.split('.')[-1], dataset_name=parameters["dataset_name"])
     params = dict(parameters)
     dataset_name = params.pop("dataset_name")
     for f in tqdm(files) : 
         df = pd.read_csv(f)
-        dialog, answer = get_dialog(df)
+        dialog, answer = get_dialog(df, dataset_name)
         split_dialog = dialog.split("\n")[-n-3:]
         last_n = ""
         for d in split_dialog:
@@ -270,14 +334,17 @@ def make_rag(pipe, files, **parameters):
         overlap = parameters['kwargs'].pop("overlap")
     if "chunk_size" in parameters['kwargs']:
         chunk_size = parameters['kwargs'].pop("chunk_size")
-
-    start = get_start_prompt(processing="rag")
+    if "dataset_name" in parameters['kwargs']:
+        dataset_name = parameters['kwargs'].pop("dataset_name")
+    if "attn_implementation" in parameters:
+        attn_implementation = parameters.pop("attn_implementation")
+    start = get_start_prompt(processing="rag", dataset_name=dataset_name)
     end = get_end_prompt()
     files = get_files(run, "", optional_arg=run.__name__.split('.')[-1], dataset_name=parameters["dataset_name"])
     print("Processing RAG, files : ", len(files))
     for f in tqdm(files) : 
         df = pd.read_csv(f)
-        dialog, answer = get_dialog(df, img=False)
+        dialog, answer = get_dialog(df, dataset_name, img=False)
         split_dialog = dialog.split("\n")
         if "\n" in split_dialog : 
             split_dialog.remove("\n")
@@ -303,11 +370,17 @@ def make_rag(pipe, files, **parameters):
             docs = [d.page_content for d in retriever.invoke(query)]
         else : 
             chroma_client = chromadb.PersistentClient(path="../data/RAGdatabase/db"+"/"+parameters["dataset_name"])
-            colname = f.split("/")[-1].split(".")[0]
+            if "spot" in dataset_name : 
+                file_name = "_".join(f.split("/")[-1].split(".")[0].split("_")[1:])
+            else: 
+                file_name = f.split("/")[-1].split(".")[0]
+            colname = file_name
             if colname in [c.name for c in chroma_client.list_collections()]:
                 continue
 
-            collection = chroma_client.create_collection(name=f.split("/")[-1].split(".")[0])
+            collection = chroma_client.create_collection(name=file_name)
+            parameters["autoset_attn_implementation"] =True
+
             collection.add(
                 documents=chunks,
                 embeddings=generate_embeddings(chunks, "document", **parameters),
@@ -324,6 +397,9 @@ def make_rag(pipe, files, **parameters):
 
         prompt += query
         save(prompt, run, f, "", run.__name__.split(".")[-1], dataset_name=parameters["dataset_name"])
+
+    #if attn_implementation :
+        #parameters["attn_implementation"] = attn_implementation
 
 def pre_generate(pipe, files, **parameters):
 
@@ -348,6 +424,8 @@ def generate_embeddings(documents, pre=None, **parameters):
     tokenizer = parameters["kwargs"]["rag_tokenizer"]
     model = parameters["kwargs"]["rag_model"]
     tok_documents = tokenizer(documents, padding=True, truncation=True, return_tensors='pt').to("cuda")
+    if "NV" in str(parameters["kwargs"]["rag_model"]):
+        model.model._attn_implementation = ""
     model.to("cuda")
     with torch.no_grad():
         embeddings_queries = model(**tok_documents)

@@ -15,13 +15,14 @@ from transformers.pipelines.pt_utils import KeyDataset
 import numpy as np 
 import random as rn
 
-from inference import FullDialog, SlidingWindow, Summary, RAG, RAGBM25, InfiniTransformer, InfiniTransformerBonus, ChainOfThought, GraphRAG
+from inference import FullDialog, SlidingWindow, Summary, RAG, RAGBM25, InfiniTransformer, InfiniTransformerBonus, ChainOfThought, GraphRAG, LocalAnswerContext
 from utils import save, get_files, MODELS
 
 import prompt as prompting
 import os
 import time 
-
+import torch._dynamo
+    
 
 def init_seeds():
     SEED = 42
@@ -56,8 +57,6 @@ def parse_args():
     return args
 
 def main():
-
-    
     init_seeds()
 
     args = parse_args()
@@ -66,32 +65,39 @@ def main():
 
     #TODO Jobs should be ran with different models through code args
     if args.model is None :
-        model_id = "meta-llama/Meta-Llama-3.1-8B-Instruct"
+        #model_id = "meta-llama/Meta-Llama-3.1-8B-Instruct"
         #model_id = "meta-llama/Meta-Llama-3-70B-Instruct"
         #model_id = "google/gemma-2-27b-it"
         #model_id = "google/gemma-2-9b-it"
-        #model_id = "google/gemma-2-2b-it" # not implemented
+        model_id = "google/gemma-2-2b-it" # not implemented
+        #model_id = "Qwen/QwQ-32B"
     else : 
         model_id = args.model
 
 
     
     print(args.cot)
+    
+    #TODO spot the difference inference and evaluation
+    #TODO get results for memgpt
+    #TODO add ifs for context size
 
-    #TODO remember to run only on A100 40 or 80
+
     runs = [
             #FullDialog, # max / 2048 
             #SlidingWindow, #2048 ?  
             #Summary, #2048 
-            #RAG, #2048
+            RAG, #2048
             RAGBM25,
+            #LocalAnswerContext
             #InfiniTransformer, # 2048 * 4 = 8192 
-            #InfiniTransformerBonus, 
-            #ChainOfThought, 
-            #GraphRAG,
+            #InfiniTransformerBonus,
             ]
 
     
+    dataset = "merged_spot"
+    #dataset = "meetup_target"
+
     devices = []
 
     if torch.cuda.is_available() :
@@ -111,38 +117,40 @@ def main():
         print("using flash_attention_2")
 
     model = AutoModelForCausalLM.from_pretrained(model_id,
-                                                 attn_implementation=attn_implementation,
+                                                 attn_implementation='flash_attention_2',
                                                  torch_dtype = torch.bfloat16,
                                                  device_map="auto")
     tokenizer = AutoTokenizer.from_pretrained(model_id)
-    
     parameters = {"hf_token":hf_token,
                   "model_id":model_id,
                   "devices":devices,
                   "tokenizer":tokenizer,
                   "CoT":args.cot}
 
+    if "spot" in dataset:
+        parameters["max_new_tokens"] = 300
     print("model id : ", model_id)
     infer_times = []
-    directories = [ f.path for f in os.scandir("../data/meetup_target/") if f.is_dir() ]
+    
+    directories = [ f.path for f in os.scandir("../data/"+dataset+"/") if f.is_dir() ]
     for d in directories:
         print("LAUNCHING : -------    ", d.split("/")[-1], "    -------")
         for run in runs:
-            files = get_files(run, model_id, CoT=parameters["CoT"], dataset_name=d.split("/")[-1]) 
+            files = get_files(run, model_id, CoT=parameters["CoT"], dataset_name=dataset+"/"+d.split("/")[-1]) 
             if files == []:
                 print("Already executed :", run.__name__.split(".")[-1] )
                 continue
             #files = ["../data/meetup_target/Inferred/merge_309_387_26_37.csv"]
             print("Running : ", run.__name__.split(".")[-1])
             parameters["run"]=run
-            parameters["dataset_name"]=d.split("/")[-1]
+            parameters["dataset_name"]=dataset+"/"+d.split("/")[-1]
             if run.__name__.split(".")[-1] == "InfiniTransformer":
                 model_name = "Infini-Llama3.1-8B-it-8192"
             else :
                 model_name = MODELS[model_id]
             #execution here
-            infer_times = d.split("/")[-1] + ","+ str(parameters["CoT"]) +","+ run.__name__.split(".")[-1] +","+ model_name +","+str(run.inference(model=model, files = files, **parameters))
-            path_infer_stats = "../runs/meetup_target/inference_stats.csv"
+            infer_times = dataset+"/"+d.split("/")[-1] + ","+ str(parameters["CoT"]) +","+ run.__name__.split(".")[-1] +","+ model_name +","+str(run.inference(model=model, files = files, **parameters))
+            path_infer_stats = "../runs/"+dataset+"/inference_stats.csv"
             if os.path.exists(path_infer_stats):
                 with open(path_infer_stats, "a") as f:
                     f.write("\n"+infer_times)

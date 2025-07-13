@@ -1,4 +1,4 @@
-from .models import llama, gemma
+from .models import llama, gemma, qwenQwQ
 from transformers import AutoTokenizer, AutoModel
 import torch
 
@@ -25,5 +25,7 @@ def inference( files, **parameters):
         res = llama.inference(files=files, verbose=True, **parameters)
     if "gemma" in model_id:
         res = gemma.inference(files=files, verbose=True, **parameters)
+    if "QwQ" in model_id:
+        res = qwenQwQ.inference(files=files, verbose=True, **parameters)
 
     return res
