@@ -5,7 +5,7 @@
 [![Paper](https://img.shields.io/badge/arXiv-2601.09365-B31B1B.svg)](https://arxiv.org/abs/2601.09365)
 
 This repository provides the implementations for the **finetuning** pipelines of
-**[Frame of Reference: Addressing the Challenges of Common Ground Representation in Situational Dialogs](https://arxiv.org/abs/2601.09365)**.
+**[Frame of Reference: Addressing the Challenges of Common Ground Representation in Situational Dialogs](https://arxiv.org/abs/2601.09365)**. The work got accepted at the **Findings of ACL 2026**.
 
 ---
 
