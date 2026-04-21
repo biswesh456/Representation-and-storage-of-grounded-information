@@ -304,7 +304,7 @@ dependencies:
     - pyarrow==18.0.0
     - pyasn1==0.6.1
     - pyasn1-modules==0.4.1
-    - pyautogen==0.2.22
+    - ag2==0.2.22
     - pycountry==24.6.1
     - pycparser==2.22
     - pydantic==2.9.2
